@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import random
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -89,6 +90,14 @@ def apply_training_profile(config, smoke_test_override):
     return smoke_test
 
 
+def create_run_id(smoke_test, requested_run_id=None):
+    if requested_run_id:
+        return requested_run_id
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    profile = "smoke" if smoke_test else "full"
+    return f"{timestamp}-{profile}"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default="configs/vihsd.yaml")
@@ -98,9 +107,15 @@ def main() -> None:
         default=None,
         help="Override the YAML profile and run the small smoke-test configuration.",
     )
+    parser.add_argument(
+        "--run-id",
+        default=None,
+        help="Optional identifier for this run. Defaults to UTC timestamp plus profile.",
+    )
     args = parser.parse_args()
     config = yaml.safe_load(Path(args.config).read_text(encoding="utf-8"))
     smoke_test = apply_training_profile(config, args.smoke_test)
+    run_id = create_run_id(smoke_test, args.run_id)
     set_seed(int(config["seed"]))
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     data_config = {**config["dataset"], **config["training"]}
@@ -109,12 +124,15 @@ def main() -> None:
     model = ViHSDMoEClassifier(bundle.tokenizer.vocab_size, bundle.num_labels, model_config).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=float(config["training"]["learning_rate"]), weight_decay=float(config["training"]["weight_decay"]))
     balance_factor = float(config["routing"]["load_balance_loss_factor"])
-    checkpoint_dir = Path(config["paths"]["checkpoint_dir"])
+    checkpoint_root = Path(config["paths"]["checkpoint_dir"])
+    checkpoint_dir = checkpoint_root / run_id
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
-    results_dir = Path(config["paths"]["results_dir"])
+    results_root = Path(config["paths"]["results_dir"])
+    results_dir = results_root / run_id
     results_dir.mkdir(parents=True, exist_ok=True)
     wandb_run = maybe_start_wandb(config)
     print(f"Training profile: {'smoke test' if smoke_test else 'full run'}")
+    print(f"Run ID: {run_id}")
     best_accuracy = -1.0
     history = []
     for epoch in range(int(config["training"]["epochs"])):
@@ -128,11 +146,14 @@ def main() -> None:
         if validation_accuracy > best_accuracy:
             best_accuracy = validation_accuracy
             save_file({name: tensor.detach().cpu().contiguous() for name, tensor in model.state_dict().items()}, str(checkpoint_dir / "vihsd_moe_best.safetensors"))
-            (checkpoint_dir / "vihsd_moe_metadata.json").write_text(json.dumps({"label_names": bundle.label_names, "model_config": model_config}, indent=2), encoding="utf-8")
+            (checkpoint_dir / "vihsd_moe_metadata.json").write_text(json.dumps({"run_id": run_id, "label_names": bundle.label_names, "model_config": model_config}, indent=2), encoding="utf-8")
     (results_dir / "training_history.json").write_text(json.dumps(history, indent=2), encoding="utf-8")
+    (checkpoint_root / "latest_run.json").write_text(json.dumps({"run_id": run_id, "checkpoint": str(checkpoint_dir / "vihsd_moe_best.safetensors")}, indent=2), encoding="utf-8")
+    (results_root / "latest_run.json").write_text(json.dumps({"run_id": run_id, "results_dir": str(results_dir)}, indent=2), encoding="utf-8")
     if wandb_run is not None:
         wandb_run.finish()
     print(f"Best checkpoint: {checkpoint_dir / 'vihsd_moe_best.safetensors'}")
+    print(f"Run results: {results_dir}")
 
 
 if __name__ == "__main__":

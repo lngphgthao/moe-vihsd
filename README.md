@@ -12,6 +12,23 @@ python train.py --config configs/vihsd.yaml
 python evaluate.py --config configs/vihsd.yaml
 ```
 
+Each training run receives a unique UTC timestamp and profile identifier, for example:
+
+```text
+20260822T143015Z-full
+20260822T143420Z-smoke
+```
+
+Checkpoints and results are stored in matching run folders. The latest run is recorded in `checkpoints/latest_run.json` and `results/latest_run.json`, so evaluation without extra options uses the newest run.
+
+To evaluate an older run, pass its identifier:
+
+```bash
+python evaluate.py --config configs/vihsd.yaml --run-id 20260822T143015Z-full
+```
+
+You can also provide a direct checkpoint path with `--checkpoint`.
+
 The YAML defaults to full training. Run a quick smoke test without editing the YAML:
 
 ```bash
