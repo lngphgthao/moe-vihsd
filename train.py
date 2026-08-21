@@ -77,11 +77,30 @@ def maybe_start_wandb(config):
     return wandb.init(project=logging_config["project"], name=logging_config.get("run_name"), config=config)
 
 
+def apply_training_profile(config, smoke_test_override):
+    training_config = config["training"]
+    smoke_test = training_config.get("smoke_test", False)
+    if smoke_test_override is not None:
+        smoke_test = smoke_test_override
+    if smoke_test:
+        smoke_config = training_config.get("smoke", {})
+        training_config["epochs"] = smoke_config.get("epochs", 1)
+        training_config["max_train_samples"] = smoke_config.get("max_train_samples", 2000)
+    return smoke_test
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default="configs/vihsd.yaml")
+    parser.add_argument(
+        "--smoke-test",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Override the YAML profile and run the small smoke-test configuration.",
+    )
     args = parser.parse_args()
     config = yaml.safe_load(Path(args.config).read_text(encoding="utf-8"))
+    smoke_test = apply_training_profile(config, args.smoke_test)
     set_seed(int(config["seed"]))
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     data_config = {**config["dataset"], **config["training"]}
@@ -95,6 +114,7 @@ def main() -> None:
     results_dir = Path(config["paths"]["results_dir"])
     results_dir.mkdir(parents=True, exist_ok=True)
     wandb_run = maybe_start_wandb(config)
+    print(f"Training profile: {'smoke test' if smoke_test else 'full run'}")
     best_accuracy = -1.0
     history = []
     for epoch in range(int(config["training"]["epochs"])):

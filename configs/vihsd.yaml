@@ -1,21 +1,25 @@
 seed: 42
 dataset:
-  name: NlpHUST/ViHSD
+  name: uitnlp/vihsd
   config: null
-  text_column: text
-  label_column: label
+  text_column: free_text
+  label_column: label_id
   tokenizer: vinai/phobert-base
   max_length: 128
   train_split: train
   validation_split: validation
   test_split: test
 training:
+  smoke_test: false
   epochs: 5
   batch_size: 16
   learning_rate: 0.0002
   weight_decay: 0.01
   num_workers: 2
   max_train_samples: null
+  smoke:
+    epochs: 1
+    max_train_samples: 2000
 model:
   model_dim: 128
   expert_hidden_dim: 512
