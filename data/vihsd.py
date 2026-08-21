@@ -57,6 +57,7 @@ def prepare_data(config: dict) -> DatasetBundle:
     if label_column not in raw[config["train_split"]].column_names:
         raise KeyError(f"Label column {label_column!r} not found in {raw[config['train_split']].column_names}")
 
+    raw = raw.filter(lambda example: example[text_column] is not None, desc="Removing examples with missing text")
     label_names, label_to_id = _label_info(raw[config["train_split"]], label_column)
     tokenizer_kwargs = {"token": hf_token} if hf_token else {}
     tokenizer = AutoTokenizer.from_pretrained(config["tokenizer"], **tokenizer_kwargs)
