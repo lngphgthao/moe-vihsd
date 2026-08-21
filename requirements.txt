@@ -1,0 +1,9 @@
+datasets>=2.18
+matplotlib>=3.8
+PyYAML>=6.0
+safetensors>=0.4
+scikit-learn>=1.4
+torch>=2.2
+tqdm>=4.66
+transformers>=4.40
+wandb>=0.16

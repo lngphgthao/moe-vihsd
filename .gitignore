@@ -1,0 +1,56 @@
+# Python caches and local tooling
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+/moe_vihsd.ipynb
+
+# Local Python environments and secrets
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+env/
+.python-version
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Downloaded datasets and local data artifacts
+data/raw/
+data/processed/
+*.csv
+*.jsonl
+*.arrow
+*.parquet
+*.zip
+
+# Training outputs and local experiment artifacts
+results/*
+!results/README.md
+checkpoints/*
+!checkpoints/README.md
+runs/
+wandb/
+tensorboard/
+logs/
+
+# Large model files and serialized weights
+*.pt
+*.pth
+*.ckpt
+*.bin
+*.safetensors
+*.onnx
+
+# Temporary files
+*.tmp
+*.temp
+*.bak

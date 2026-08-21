@@ -1,0 +1,36 @@
+seed: 42
+dataset:
+  name: NlpHUST/ViHSD
+  config: null
+  text_column: text
+  label_column: label
+  tokenizer: vinai/phobert-base
+  max_length: 128
+  train_split: train
+  validation_split: validation
+  test_split: test
+training:
+  epochs: 5
+  batch_size: 16
+  learning_rate: 0.0002
+  weight_decay: 0.01
+  num_workers: 2
+  max_train_samples: null
+model:
+  model_dim: 128
+  expert_hidden_dim: 512
+  num_attention_heads: 4
+  num_layers: 2
+  num_experts: 4
+  top_k: 1
+  dropout: 0.1
+routing:
+  load_balance_loss_factor: 0.01
+  capacity_factor: 1.25
+paths:
+  checkpoint_dir: /content/drive/MyDrive/ViHSD-MoE/checkpoints
+  results_dir: results
+logging:
+  use_wandb: false
+  project: vihsd-moe
+  run_name: full-parameter-moe
