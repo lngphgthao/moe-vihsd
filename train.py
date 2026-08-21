@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import random
 from datetime import datetime, timezone
 from pathlib import Path
@@ -98,6 +99,10 @@ def create_run_id(smoke_test, requested_run_id=None):
     return f"{timestamp}-{profile}"
 
 
+def resolve_output_path(configured_path, environment_name):
+    return Path(os.getenv(environment_name, configured_path)).expanduser()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default="configs/vihsd.yaml")
@@ -124,10 +129,10 @@ def main() -> None:
     model = ViHSDMoEClassifier(bundle.tokenizer.vocab_size, bundle.num_labels, model_config).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=float(config["training"]["learning_rate"]), weight_decay=float(config["training"]["weight_decay"]))
     balance_factor = float(config["routing"]["load_balance_loss_factor"])
-    checkpoint_root = Path(config["paths"]["checkpoint_dir"])
+    checkpoint_root = resolve_output_path(config["paths"]["checkpoint_dir"], "CHECKPOINT_DIR")
     checkpoint_dir = checkpoint_root / run_id
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
-    results_root = Path(config["paths"]["results_dir"])
+    results_root = resolve_output_path(config["paths"]["results_dir"], "RESULTS_DIR")
     results_dir = results_root / run_id
     results_dir.mkdir(parents=True, exist_ok=True)
     wandb_run = maybe_start_wandb(config)

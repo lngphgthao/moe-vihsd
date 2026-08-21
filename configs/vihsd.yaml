@@ -9,6 +9,7 @@ dataset:
   train_split: train
   validation_split: validation
   test_split: test
+  tokenization_num_proc: 2
 training:
   smoke_test: false
   epochs: 5
@@ -32,7 +33,7 @@ routing:
   load_balance_loss_factor: 0.01
   capacity_factor: 1.25
 paths:
-  checkpoint_dir: /content/drive/MyDrive/ViHSD-MoE/checkpoints
+  checkpoint_dir: checkpoints
   results_dir: results
 logging:
   use_wandb: false

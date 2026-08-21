@@ -43,7 +43,7 @@ python train.py --config configs/vihsd.yaml --no-smoke-test
 
 The smoke profile is defined under `training.smoke` in the YAML. The normal profile uses the top-level `training.epochs` and `training.max_train_samples` values.
 
-The default checkpoint path is `/content/drive/MyDrive/ViHSD-MoE/checkpoints`, which is intentionally a Google Colab Drive path. Change `paths.checkpoint_dir` for local execution.
+The default checkpoint path is the local `checkpoints` folder. In Colab, set `CHECKPOINT_DIR` to a Google Drive folder so the same scripts persist runs outside the temporary runtime. `RESULTS_DIR` can override the results location in the same way.
 
 Hugging Face authentication is loaded from the local `.env` file using the `HF_TOKEN` variable. Keep `.env` private and create it with:
 

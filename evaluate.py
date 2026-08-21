@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 
 import torch
@@ -14,6 +15,10 @@ from tqdm.auto import tqdm
 
 from data.vihsd import prepare_data
 from models.moe import ViHSDMoEClassifier
+
+
+def resolve_output_path(configured_path, environment_name):
+    return Path(os.getenv(environment_name, configured_path)).expanduser()
 
 
 def main() -> None:
@@ -27,7 +32,7 @@ def main() -> None:
     bundle = prepare_data({**config["dataset"], **config["training"]})
     model_config = {**config["model"], "pad_token_id": bundle.tokenizer.pad_token_id or 0}
     model = ViHSDMoEClassifier(bundle.tokenizer.vocab_size, bundle.num_labels, model_config).to(device)
-    checkpoint_root = Path(config["paths"]["checkpoint_dir"])
+    checkpoint_root = resolve_output_path(config["paths"]["checkpoint_dir"], "CHECKPOINT_DIR")
     if args.checkpoint:
         checkpoint_path = Path(args.checkpoint)
     elif args.run_id:
@@ -57,7 +62,7 @@ def main() -> None:
             routing_counts += torch.bincount(routing["top_indices"].reshape(-1).cpu(), minlength=model.num_experts)
             predictions.extend({"prediction": int(prediction), "label": int(label)} for prediction, label in zip(predicted.cpu(), labels.cpu()))
     results = {"loss": total_loss / total_examples, "accuracy": total_correct / total_examples, "label_names": bundle.label_names, "routing_counts": routing_counts.tolist(), "predictions": predictions}
-    results_root = Path(config["paths"]["results_dir"])
+    results_root = resolve_output_path(config["paths"]["results_dir"], "RESULTS_DIR")
     run_id = checkpoint_path.parent.name
     results_dir = results_root / run_id
     results_dir.mkdir(parents=True, exist_ok=True)
