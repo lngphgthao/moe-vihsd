@@ -36,5 +36,5 @@ paths:
   results_dir: results
 logging:
   use_wandb: false
-  project: vihsd-moe
+  project: moe-vihsd
   run_name: full-parameter-moe

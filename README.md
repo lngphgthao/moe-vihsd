@@ -45,4 +45,12 @@ The smoke profile is defined under `training.smoke` in the YAML. The normal prof
 
 The default checkpoint path is `/content/drive/MyDrive/ViHSD-MoE/checkpoints`, which is intentionally a Google Colab Drive path. Change `paths.checkpoint_dir` for local execution.
 
+Hugging Face authentication is loaded from the local `.env` file using the `HF_TOKEN` variable. Keep `.env` private and create it with:
+
+```text
+HF_TOKEN=your_hugging_face_token
+```
+
+Tokenization uses the configured `dataset.tokenization_num_proc` workers and Hugging Face's cache. Set it to `1` if multiprocessing is unavailable in your environment. Already-tokenized data is reused from cache on later runs.
+
 Set `logging.use_wandb: true` in the YAML and authenticate with W&B before training to enable logging.

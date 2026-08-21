@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
+import os
 
 import torch
 from datasets import ClassLabel, DatasetDict, load_dataset
+from dotenv import load_dotenv
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
 
@@ -40,8 +42,12 @@ def _label_info(dataset, label_column: str) -> tuple[list[str], dict[Any, int]]:
 
 
 def prepare_data(config: dict) -> DatasetBundle:
+    load_dotenv()
+    hf_token = os.getenv("HF_TOKEN")
     dataset_config = config["config"]
     kwargs = {} if dataset_config is None else {"name": dataset_config}
+    if hf_token:
+        kwargs["token"] = hf_token
     raw = load_dataset(config["name"], **kwargs)
     raw = _ensure_splits(raw, config)
     text_column = config["text_column"]
@@ -52,14 +58,21 @@ def prepare_data(config: dict) -> DatasetBundle:
         raise KeyError(f"Label column {label_column!r} not found in {raw[config['train_split']].column_names}")
 
     label_names, label_to_id = _label_info(raw[config["train_split"]], label_column)
-    tokenizer = AutoTokenizer.from_pretrained(config["tokenizer"])
+    tokenizer_kwargs = {"token": hf_token} if hf_token else {}
+    tokenizer = AutoTokenizer.from_pretrained(config["tokenizer"], **tokenizer_kwargs)
 
     def tokenize(batch):
         encoded = tokenizer(batch[text_column], truncation=True, padding="max_length", max_length=config["max_length"])
         encoded["labels"] = [label_to_id[value] for value in batch[label_column]]
         return encoded
 
-    tokenized = raw.map(tokenize, batched=True)
+    tokenized = raw.map(
+        tokenize,
+        batched=True,
+        num_proc=config.get("tokenization_num_proc"),
+        load_from_cache_file=True,
+        desc="Tokenizing dataset",
+    )
     keep_columns = ["input_ids", "attention_mask", "labels"]
     tokenized.set_format(type="torch", columns=keep_columns)
     limit = config.get("max_train_samples")
