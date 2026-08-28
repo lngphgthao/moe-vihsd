@@ -132,6 +132,35 @@ def resolve_output_path(configured_path, environment_name):
     return Path(os.getenv(environment_name, configured_path)).expanduser()
 
 
+def flatten_hyperparameters(values, prefix=""):
+    """Return nested configuration values as stable dotted keys for comparison."""
+    flattened = {}
+    for key, value in values.items():
+        full_key = f"{prefix}.{key}" if prefix else key
+        if isinstance(value, dict):
+            flattened.update(flatten_hyperparameters(value, full_key))
+        else:
+            flattened[full_key] = value
+    return flattened
+
+
+def create_hyperparameters_log(config, run_id, smoke_test):
+    """Keep only experiment-defining settings, excluding paths and credentials."""
+    hyperparameters = {
+        "seed": config["seed"],
+        "dataset": config["dataset"],
+        "training": config["training"],
+        "model": config["model"],
+        "routing": config["routing"],
+    }
+    return {
+        "run_id": run_id,
+        "profile": "smoke" if smoke_test else "full",
+        "hyperparameters": hyperparameters,
+        "flat_hyperparameters": flatten_hyperparameters(hyperparameters),
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default="configs/vihsd.yaml")
@@ -175,6 +204,11 @@ def main() -> None:
     results_dir.mkdir(parents=True, exist_ok=True)
     (checkpoint_dir / "resolved_config.yaml").write_text(
         yaml.safe_dump(config, sort_keys=False), encoding="utf-8"
+    )
+    hyperparameters_path = results_dir / "hyperparameters.json"
+    hyperparameters_path.write_text(
+        json.dumps(create_hyperparameters_log(config, run_id, smoke_test), indent=2, sort_keys=True),
+        encoding="utf-8",
     )
     wandb_run = maybe_start_wandb(config)
     print(f"Training profile: {'smoke test' if smoke_test else 'full run'}")
@@ -235,6 +269,7 @@ def main() -> None:
         wandb_run.finish()
     print(f"Best checkpoint: {best_checkpoint_path}")
     print(f"Run results: {results_dir}")
+    print(f"Hyperparameters: {hyperparameters_path}")
 
 
 if __name__ == "__main__":
