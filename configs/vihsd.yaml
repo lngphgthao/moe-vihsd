@@ -16,7 +16,9 @@ training:
   batch_size: 16
   learning_rate: 0.0002
   weight_decay: 0.01
-  num_workers: 2
+  # Keep this at 0 for notebook/Colab compatibility. Override it on a script-only
+  # local run (for example, --set training.num_workers=2) if needed.
+  num_workers: 0
   max_train_samples: null
   smoke:
     epochs: 1

@@ -94,6 +94,6 @@ Hugging Face authentication is loaded from the local `.env` file using the `HF_T
 HF_TOKEN=your_hugging_face_token
 ```
 
-Tokenization uses the configured `dataset.tokenization_num_proc` workers and Hugging Face's cache. Set it to `1` if multiprocessing is unavailable in your environment. Already-tokenized data is reused from cache on later runs.
+Tokenization uses the configured `dataset.tokenization_num_proc` workers and Hugging Face's cache. Set it to `1` if multiprocessing is unavailable in your environment. Data loading defaults to `training.num_workers: 0`, which avoids PyTorch worker-cleanup errors in Colab/Jupyter; for a script-only local run, you can increase it with `--set training.num_workers=2`. Already-tokenized data is reused from cache on later runs.
 
 Set `logging.use_wandb: true` in the YAML to enable logging. In Colab, create a Google Secret named `WANDB_API_KEY`; the notebook loads it into the runtime and verifies the W&B login before training. Keep this key out of the notebook, YAML, and Git repository. For local runs, authenticate once with `wandb login --verify`.
