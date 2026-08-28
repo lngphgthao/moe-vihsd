@@ -62,6 +62,8 @@ Each training run receives a unique Hanoi-time (`UTC+07:00`) timestamp and profi
 
 Checkpoints and results are stored in matching run folders. The latest run is recorded in `checkpoints/latest_run.json` and `results/latest_run.json`, so evaluation without extra options uses the newest run.
 
+Each completed training run also writes `results/<run-id>/run_metrics.json`. It records train and validation loss/accuracy from the best-validation epoch, plus test loss/accuracy after that best checkpoint is reloaded. `training_history.json` retains the train and validation metrics for every epoch. Use test metrics to report a final model, not to choose hyperparameters.
+
 To evaluate an older run, pass its identifier:
 
 ```bash

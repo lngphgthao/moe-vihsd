@@ -13,7 +13,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import yaml
-from safetensors.torch import save_file
+from safetensors.torch import load_file, save_file
 from tqdm.auto import tqdm
 
 from data.vihsd import prepare_data
@@ -180,6 +180,7 @@ def main() -> None:
     print(f"Training profile: {'smoke test' if smoke_test else 'full run'}")
     print(f"Run ID: {run_id}")
     best_accuracy = -1.0
+    best_record = None
     history = []
     total_epochs = int(config["training"]["epochs"])
     for epoch in range(total_epochs):
@@ -202,12 +203,37 @@ def main() -> None:
             best_accuracy = validation_accuracy
             save_file({name: tensor.detach().cpu().contiguous() for name, tensor in model.state_dict().items()}, str(checkpoint_dir / "vihsd_moe_best.safetensors"))
             (checkpoint_dir / "vihsd_moe_metadata.json").write_text(json.dumps({"run_id": run_id, "label_names": bundle.label_names, "model_config": model_config}, indent=2), encoding="utf-8")
+            best_record = record
     (results_dir / "training_history.json").write_text(json.dumps(history, indent=2), encoding="utf-8")
+    if best_record is None:
+        raise RuntimeError("Training produced no checkpoint; set training.epochs to at least 1.")
+    best_checkpoint_path = checkpoint_dir / "vihsd_moe_best.safetensors"
+    model.load_state_dict(load_file(str(best_checkpoint_path), device=str(device)))
+    test_loss, test_accuracy = evaluate(model, bundle.loaders["test"], device)
+    run_metrics = {
+        "run_id": run_id,
+        "best_epoch": best_record["epoch"],
+        "train": {
+            "loss": best_record["train_loss"],
+            "accuracy": best_record["train_accuracy"],
+        },
+        "validation": {
+            "loss": best_record["validation_loss"],
+            "accuracy": best_record["validation_accuracy"],
+        },
+        "test": {"loss": test_loss, "accuracy": test_accuracy},
+    }
+    (results_dir / "run_metrics.json").write_text(
+        json.dumps(run_metrics, indent=2), encoding="utf-8"
+    )
+    print(json.dumps(run_metrics, indent=2))
+    if wandb_run is not None:
+        wandb_run.log({"best_epoch": best_record["epoch"], "test_loss": test_loss, "test_accuracy": test_accuracy})
     (checkpoint_root / "latest_run.json").write_text(json.dumps({"run_id": run_id, "checkpoint": str(checkpoint_dir / "vihsd_moe_best.safetensors")}, indent=2), encoding="utf-8")
     (results_root / "latest_run.json").write_text(json.dumps({"run_id": run_id, "results_dir": str(results_dir)}, indent=2), encoding="utf-8")
     if wandb_run is not None:
         wandb_run.finish()
-    print(f"Best checkpoint: {checkpoint_dir / 'vihsd_moe_best.safetensors'}")
+    print(f"Best checkpoint: {best_checkpoint_path}")
     print(f"Run results: {results_dir}")
 
 
