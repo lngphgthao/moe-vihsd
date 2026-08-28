@@ -96,4 +96,4 @@ HF_TOKEN=your_hugging_face_token
 
 Tokenization uses the configured `dataset.tokenization_num_proc` workers and Hugging Face's cache. Set it to `1` if multiprocessing is unavailable in your environment. Already-tokenized data is reused from cache on later runs.
 
-Set `logging.use_wandb: true` in the YAML and authenticate with W&B before training to enable logging.
+Set `logging.use_wandb: true` in the YAML to enable logging. In Colab, create a Google Secret named `WANDB_API_KEY`; the notebook loads it into the runtime and verifies the W&B login before training. Keep this key out of the notebook, YAML, and Git repository. For local runs, authenticate once with `wandb login --verify`.
