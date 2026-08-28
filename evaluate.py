@@ -28,10 +28,6 @@ def main() -> None:
     parser.add_argument("--run-id", default=None, help="Evaluate a specific run directory.")
     args = parser.parse_args()
     config = yaml.safe_load(Path(args.config).read_text(encoding="utf-8"))
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    bundle = prepare_data({**config["dataset"], **config["training"]})
-    model_config = {**config["model"], "pad_token_id": bundle.tokenizer.pad_token_id or 0}
-    model = ViHSDMoEClassifier(bundle.tokenizer.vocab_size, bundle.num_labels, model_config).to(device)
     checkpoint_root = resolve_output_path(config["paths"]["checkpoint_dir"], "CHECKPOINT_DIR")
     if args.checkpoint:
         checkpoint_path = Path(args.checkpoint)
@@ -42,6 +38,14 @@ def main() -> None:
         if not latest_path.exists():
             raise FileNotFoundError("No latest run found. Train first or pass --checkpoint/--run-id.")
         checkpoint_path = Path(json.loads(latest_path.read_text(encoding="utf-8"))["checkpoint"])
+    resolved_config_path = checkpoint_path.parent / "resolved_config.yaml"
+    if resolved_config_path.exists():
+        config = yaml.safe_load(resolved_config_path.read_text(encoding="utf-8"))
+        print(f"Using run configuration: {resolved_config_path}")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    bundle = prepare_data({**config["dataset"], **config["training"]})
+    model_config = {**config["model"], "pad_token_id": bundle.tokenizer.pad_token_id or 0}
+    model = ViHSDMoEClassifier(bundle.tokenizer.vocab_size, bundle.num_labels, model_config).to(device)
     model.load_state_dict(load_file(str(checkpoint_path), device=str(device)))
     model.eval()
     predictions = []

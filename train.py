@@ -91,6 +91,26 @@ def apply_training_profile(config, smoke_test_override):
     return smoke_test
 
 
+def apply_overrides(config, overrides):
+    """Apply ``section.key=value`` overrides parsed as YAML scalars."""
+    for override in overrides:
+        if "=" not in override:
+            raise ValueError(f"Invalid --set value {override!r}; expected section.key=value.")
+        key_path, raw_value = override.split("=", 1)
+        keys = key_path.split(".")
+        if not key_path or any(not key for key in keys):
+            raise ValueError(f"Invalid configuration key {key_path!r}.")
+        target = config
+        for key in keys[:-1]:
+            if key not in target or not isinstance(target[key], dict):
+                raise KeyError(f"Unknown configuration section {key_path!r}.")
+            target = target[key]
+        if keys[-1] not in target:
+            raise KeyError(f"Unknown configuration key {key_path!r}.")
+        target[keys[-1]] = yaml.safe_load(raw_value)
+    return config
+
+
 def create_run_id(smoke_test, requested_run_id=None):
     if requested_run_id:
         return requested_run_id
@@ -107,6 +127,14 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default="configs/vihsd.yaml")
     parser.add_argument(
+        "--set",
+        dest="overrides",
+        action="append",
+        default=[],
+        metavar="SECTION.KEY=VALUE",
+        help="Override a YAML value for this run; repeat as needed (for example, training.epochs=10).",
+    )
+    parser.add_argument(
         "--smoke-test",
         action=argparse.BooleanOptionalAction,
         default=None,
@@ -119,6 +147,7 @@ def main() -> None:
     )
     args = parser.parse_args()
     config = yaml.safe_load(Path(args.config).read_text(encoding="utf-8"))
+    apply_overrides(config, args.overrides)
     smoke_test = apply_training_profile(config, args.smoke_test)
     run_id = create_run_id(smoke_test, args.run_id)
     set_seed(int(config["seed"]))
@@ -135,6 +164,9 @@ def main() -> None:
     results_root = resolve_output_path(config["paths"]["results_dir"], "RESULTS_DIR")
     results_dir = results_root / run_id
     results_dir.mkdir(parents=True, exist_ok=True)
+    (checkpoint_dir / "resolved_config.yaml").write_text(
+        yaml.safe_dump(config, sort_keys=False), encoding="utf-8"
+    )
     wandb_run = maybe_start_wandb(config)
     print(f"Training profile: {'smoke test' if smoke_test else 'full run'}")
     print(f"Run ID: {run_id}")

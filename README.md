@@ -4,6 +4,27 @@
 
 Open `main.ipynb` in Google Colab. The notebook mounts Drive, installs `requirements.txt`, runs `train.py`, and runs `evaluate.py`.
 
+For repeated experiments, edit the `EXPERIMENT_OVERRIDES` cell in the notebook instead of editing and pushing `configs/vihsd.yaml`. It passes only the changed values to the training command, so the versioned YAML remains the shared baseline. Each checkpoint folder stores the exact `resolved_config.yaml`, and evaluation automatically uses it.
+
+## Experiment overrides
+
+An override uses the same path as a value in `configs/vihsd.yaml`, with sections separated by dots. The YAML file is never modified: omitted values keep their defaults.
+
+For example, this Colab configuration compares an 8-expert, top-2 router against the default 4-expert, top-1 model:
+
+```python
+EXPERIMENT_OVERRIDES = {
+    "training.epochs": 10,
+    "training.learning_rate": 0.0001,
+    "model.num_experts": 8,
+    "model.top_k": 2,
+}
+RUN_ID = "experts-8-topk-2-lr-1e-4"
+SMOKE_TEST = False
+```
+
+Set `EXPERIMENT_OVERRIDES = {}` to run the unmodified YAML defaults. Use a unique `RUN_ID` for a readable experiment folder, or set it to `None` for an automatic UTC timestamp. Keep `model.top_k` no greater than `model.num_experts`.
+
 ## Local commands
 
 ```bash
@@ -11,6 +32,14 @@ pip install -r requirements.txt
 python train.py --config configs/vihsd.yaml
 python evaluate.py --config configs/vihsd.yaml
 ```
+
+To override values for one run without changing the file, repeat `--set` with a dotted YAML key:
+
+```bash
+python train.py --config configs/vihsd.yaml --set training.epochs=10 --set training.learning_rate=0.0001 --set model.num_experts=8
+```
+
+Values are parsed as YAML, so use `true`, `false`, `null`, numbers, quoted strings, or YAML lists as appropriate. Only existing keys can be overridden; this catches misspellings before training begins.
 
 Each training run receives a unique UTC timestamp and profile identifier, for example:
 
