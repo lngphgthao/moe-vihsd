@@ -25,6 +25,18 @@ SMOKE_TEST = False
 
 Set `EXPERIMENT_OVERRIDES = {}` to run the unmodified YAML defaults. Use a unique `RUN_ID` for a readable experiment folder, or set it to `None` for an automatic UTC timestamp. Keep `model.top_k` no greater than `model.num_experts`.
 
+### What to tune first
+
+| Priority | Settings                                                                      | Compact guidance                                                                                                                                                   |
+| -------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1        | `training.learning_rate`, `training.epochs`                                   | Tune learning rate first (`5e-5`, `1e-4`, `2e-4` are useful starting points), then train long enough for validation performance to plateau.                        |
+| 2        | `model.model_dim`, `model.num_layers`, `dataset.max_length`                   | Main model/context capacity. Increasing them may improve accuracy, but costs GPU memory and training time. `model_dim` must be divisible by `num_attention_heads`. |
+| 3        | `training.weight_decay`, `model.dropout`                                      | Regularization. Increase if training metrics improve while validation metrics worsen.                                                                              |
+| 4        | `model.num_experts`, `model.top_k`, `routing.load_balance_loss_factor`        | MoE behavior. Start at `4/1/0.01`; test `8/1` then `8/2`. Keep `1 <= top_k <= num_experts`; increase balance loss if routing collapses to a few experts.           |
+| 5        | `model.expert_hidden_dim`, `model.num_attention_heads`, `training.batch_size` | Secondary capacity/optimization controls. Larger batch sizes may require learning-rate retuning.                                                                   |
+
+`seed` affects repeatability, not the expected average score; use several seeds when comparing final candidates. `max_train_samples` and `smoke_test` are for fast debugging rather than final experiments. `num_workers`, output paths, and W&B settings do not change model quality. `routing.capacity_factor` is currently not used by the code, so changing it has no effect.
+
 ## Local commands
 
 ```bash
