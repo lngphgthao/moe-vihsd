@@ -53,11 +53,11 @@ python train.py --config configs/vihsd.yaml --set training.epochs=10 --set train
 
 Values are parsed as YAML, so use `true`, `false`, `null`, numbers, quoted strings, or YAML lists as appropriate. Only existing keys can be overridden; this catches misspellings before training begins.
 
-Each training run receives a unique UTC timestamp and profile identifier, for example:
+Each training run receives a unique Hanoi-time (`UTC+07:00`) timestamp and profile identifier, for example:
 
 ```text
-20260822T143015Z-full
-20260822T143420Z-smoke
+20260822T213015+0700-full
+20260822T214420+0700-smoke
 ```
 
 Checkpoints and results are stored in matching run folders. The latest run is recorded in `checkpoints/latest_run.json` and `results/latest_run.json`, so evaluation without extra options uses the newest run.

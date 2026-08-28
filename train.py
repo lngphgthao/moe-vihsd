@@ -6,7 +6,7 @@ import argparse
 import json
 import os
 import random
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import numpy as np
@@ -45,12 +45,19 @@ def evaluate(model, loader, device):
     return total_loss / total_examples, total_correct / total_examples
 
 
-def train_epoch(model, loader, optimizer, device, balance_factor):
+def train_epoch(model, loader, optimizer, device, balance_factor, epoch, total_epochs):
     model.train()
     total_loss = 0.0
     total_correct = 0
     total_examples = 0
-    for batch in tqdm(loader, desc="Training", leave=False):
+    progress = tqdm(
+        loader,
+        desc=f"Epoch {epoch}/{total_epochs}",
+        leave=True,
+        dynamic_ncols=True,
+        unit="batch",
+    )
+    for batch in progress:
         input_ids = batch["input_ids"].to(device)
         attention_mask = batch["attention_mask"].to(device)
         labels = batch["labels"].to(device)
@@ -65,6 +72,7 @@ def train_epoch(model, loader, optimizer, device, balance_factor):
         total_loss += loss.item() * labels.size(0)
         total_correct += (logits.argmax(dim=-1) == labels).sum().item()
         total_examples += labels.size(0)
+        progress.set_postfix(loss=f"{total_loss / total_examples:.4f}", accuracy=f"{total_correct / total_examples:.3f}")
     return total_loss / total_examples, total_correct / total_examples
 
 
@@ -114,7 +122,8 @@ def apply_overrides(config, overrides):
 def create_run_id(smoke_test, requested_run_id=None):
     if requested_run_id:
         return requested_run_id
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    hanoi_timezone = timezone(timedelta(hours=7), name="Asia/Ho_Chi_Minh")
+    timestamp = datetime.now(hanoi_timezone).strftime("%Y%m%dT%H%M%S")
     profile = "smoke" if smoke_test else "full"
     return f"{timestamp}-{profile}"
 
@@ -172,8 +181,17 @@ def main() -> None:
     print(f"Run ID: {run_id}")
     best_accuracy = -1.0
     history = []
-    for epoch in range(int(config["training"]["epochs"])):
-        train_loss, train_accuracy = train_epoch(model, bundle.loaders["train"], optimizer, device, balance_factor)
+    total_epochs = int(config["training"]["epochs"])
+    for epoch in range(total_epochs):
+        train_loss, train_accuracy = train_epoch(
+            model,
+            bundle.loaders["train"],
+            optimizer,
+            device,
+            balance_factor,
+            epoch + 1,
+            total_epochs,
+        )
         validation_loss, validation_accuracy = evaluate(model, bundle.loaders["validation"], device)
         record = {"epoch": epoch + 1, "train_loss": train_loss, "train_accuracy": train_accuracy, "validation_loss": validation_loss, "validation_accuracy": validation_accuracy}
         history.append(record)
