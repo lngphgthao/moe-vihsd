@@ -7,8 +7,14 @@ import json
 import os
 import random
 import subprocess
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+# Ensure repository root is in sys.path for direct imports and notebook environments
+_ROOT = Path(__file__).resolve().parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 import numpy as np
 import torch
@@ -20,8 +26,6 @@ from tqdm.auto import tqdm
 from data.vihsd import prepare_data
 from metrics import classification_metrics
 from models.moe import ViHSDMoEClassifier
-
-
 def set_seed(seed: int) -> None:
     random.seed(seed)
     np.random.seed(seed)

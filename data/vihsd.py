@@ -7,8 +7,12 @@ from typing import Any
 import os
 
 import torch
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    def load_dotenv():
+        pass
 from datasets import ClassLabel, DatasetDict, load_dataset
-from dotenv import load_dotenv
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
 

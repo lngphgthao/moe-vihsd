@@ -5,7 +5,13 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from pathlib import Path
+
+# Ensure repository root is in sys.path for direct imports and notebook environments
+_ROOT = Path(__file__).resolve().parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 import torch
 import torch.nn.functional as F
@@ -62,7 +68,8 @@ def main() -> None:
             predicted = logits.argmax(dim=-1)
             total_loss += F.cross_entropy(logits, labels, reduction="sum").item()
             total_examples += labels.numel()
-            routing_counts += torch.bincount(routing["top_indices"].reshape(-1).cpu(), minlength=model.num_experts)
+            if getattr(model, "num_experts", 0) > 0 and routing["top_indices"].numel():
+                routing_counts += torch.bincount(routing["top_indices"].reshape(-1).cpu(), minlength=model.num_experts)
             predictions.extend({"prediction": int(prediction), "label": int(label)} for prediction, label in zip(predicted.cpu(), labels.cpu()))
     labels = [item["label"] for item in predictions]
     predicted_labels = [item["prediction"] for item in predictions]
