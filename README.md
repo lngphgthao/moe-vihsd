@@ -62,7 +62,7 @@ Each training run receives a unique Hanoi-time (`UTC+07:00`) timestamp and profi
 
 Checkpoints and results are stored in matching run folders. The latest run is recorded in `checkpoints/latest_run.json` and `results/latest_run.json`, so evaluation without extra options uses the newest run.
 
-Each completed training run also writes `results/<run-id>/run_metrics.json`. It records train and validation loss/accuracy from the best-validation epoch, plus test loss/accuracy after that best checkpoint is reloaded. `training_history.json` retains the train and validation metrics for every epoch. `hyperparameters.json` records the resolved experiment settings both as a nested object and as `flat_hyperparameters` with dotted keys (such as `model.num_experts`), so runs are easy to diff or compare programmatically. It excludes paths and authentication settings. Use test metrics to report a final model, not to choose hyperparameters.
+Each completed training run also writes `results/<run-id>/run_metrics.json`. It records loss, accuracy, macro-F1, per-class precision/recall/F1, confusion matrices, and routing counts from the best-validation epoch and the final test evaluation. `training_history.json` retains the metrics for every epoch. `run_metadata.json` records the Git commit, hardware, split sizes, label counts, and any training class weights. `hyperparameters.json` records the resolved experiment settings both as a nested object and as `flat_hyperparameters` with dotted keys (such as `model.num_experts`), so runs are easy to diff or compare programmatically. It excludes paths and authentication settings. The best checkpoint is selected by `training.selection_metric` (macro-F1 by default); use test metrics only to report a final model, not to choose hyperparameters.
 
 To evaluate an older run, pass its identifier:
 
@@ -97,3 +97,15 @@ HF_TOKEN=your_hugging_face_token
 Tokenization uses the configured `dataset.tokenization_num_proc` workers and Hugging Face's cache. Set it to `1` if multiprocessing is unavailable in your environment. Data loading defaults to `training.num_workers: 0`, which avoids PyTorch worker-cleanup errors in Colab/Jupyter; for a script-only local run, you can increase it with `--set training.num_workers=2`. Already-tokenized data is reused from cache on later runs.
 
 Set `logging.use_wandb: true` in the YAML to enable logging. In Colab, create a Google Secret named `WANDB_API_KEY`; the notebook loads it into the runtime and verifies the W&B login before training. Keep this key out of the notebook, YAML, and Git repository. For local runs, authenticate once with `wandb login --verify`.
+
+## Experiment workflow
+
+Use validation macro-F1 (the default `training.selection_metric`) to select configurations; reserve test metrics for the final report. Every run now records class-wise metrics, confusion matrices, routing counts, data-label counts, hardware, and the Git commit under `results/<run-id>/`.
+
+Run a randomized search with the supplied conservative search space:
+
+```bash
+python search.py --space configs/search.yaml
+```
+
+It writes a macro-F1-ranked `results/search-*.json` summary. Search runs set `training.evaluate_test: false`, keeping the test split unseen during selection. After selecting the best three candidates, rerun each candidate with `--set seed=42`, `--set seed=123`, and `--set seed=456`; then enable test evaluation once for the final selected configuration. To create the dense ablation (no MoE), use `--set model.use_moe=false` while keeping all other settings fixed.

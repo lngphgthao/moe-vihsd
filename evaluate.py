@@ -14,6 +14,7 @@ from safetensors.torch import load_file
 from tqdm.auto import tqdm
 
 from data.vihsd import prepare_data
+from metrics import classification_metrics
 from models.moe import ViHSDMoEClassifier
 
 
@@ -50,7 +51,6 @@ def main() -> None:
     model.eval()
     predictions = []
     total_loss = 0.0
-    total_correct = 0
     total_examples = 0
     routing_counts = torch.zeros(model.num_experts, dtype=torch.long)
     with torch.no_grad():
@@ -61,11 +61,18 @@ def main() -> None:
             logits, routing = model(input_ids, attention_mask)
             predicted = logits.argmax(dim=-1)
             total_loss += F.cross_entropy(logits, labels, reduction="sum").item()
-            total_correct += (predicted == labels).sum().item()
             total_examples += labels.numel()
             routing_counts += torch.bincount(routing["top_indices"].reshape(-1).cpu(), minlength=model.num_experts)
             predictions.extend({"prediction": int(prediction), "label": int(label)} for prediction, label in zip(predicted.cpu(), labels.cpu()))
-    results = {"loss": total_loss / total_examples, "accuracy": total_correct / total_examples, "label_names": bundle.label_names, "routing_counts": routing_counts.tolist(), "predictions": predictions}
+    labels = [item["label"] for item in predictions]
+    predicted_labels = [item["prediction"] for item in predictions]
+    results = {
+        "loss": total_loss / total_examples,
+        **classification_metrics(labels, predicted_labels, bundle.label_names),
+        "label_names": bundle.label_names,
+        "routing_counts": routing_counts.tolist(),
+        "predictions": predictions,
+    }
     results_root = resolve_output_path(config["paths"]["results_dir"], "RESULTS_DIR")
     run_id = checkpoint_path.parent.name
     results_dir = results_root / run_id
@@ -74,6 +81,7 @@ def main() -> None:
     output_path.write_text(json.dumps(results, indent=2), encoding="utf-8")
     print(f"Test loss: {results['loss']:.4f}")
     print(f"Test accuracy: {results['accuracy']:.4f}")
+    print(f"Test macro-F1: {results['macro_f1']:.4f}")
     print(f"Run ID: {run_id}")
     print(f"Saved predictions: {output_path}")
 

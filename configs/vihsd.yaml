@@ -16,6 +16,12 @@ training:
   batch_size: 16
   learning_rate: 0.0002
   weight_decay: 0.01
+  class_weighting: none  # Set to balanced only after inspecting per-class metrics.
+  selection_metric: macro_f1
+  early_stopping_patience: 3
+  scheduler_factor: 0.5
+  scheduler_patience: 1
+  evaluate_test: true
   # Keep this at 0 for notebook/Colab compatibility. Override it on a script-only
   # local run (for example, --set training.num_workers=2) if needed.
   num_workers: 0
@@ -24,6 +30,7 @@ training:
     epochs: 1
     max_train_samples: 2000
 model:
+  use_moe: true
   model_dim: 128
   expert_hidden_dim: 512
   num_attention_heads: 4

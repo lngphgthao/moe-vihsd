@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import random
+import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from safetensors.torch import load_file, save_file
 from tqdm.auto import tqdm
 
 from data.vihsd import prepare_data
+from metrics import classification_metrics
 from models.moe import ViHSDMoEClassifier
 
 
@@ -28,28 +30,42 @@ def set_seed(seed: int) -> None:
         torch.cuda.manual_seed_all(seed)
 
 
-def evaluate(model, loader, device):
+def _routing_counts(model, routing, counts):
+    if getattr(model, "num_experts", 0) and routing["top_indices"].numel():
+        counts += torch.bincount(routing["top_indices"].reshape(-1).cpu(), minlength=model.num_experts)
+    return counts
+
+
+def evaluate(model, loader, device, label_names):
     model.eval()
     total_loss = 0.0
-    total_correct = 0
     total_examples = 0
+    predictions, labels_all = [], []
+    routing_counts = torch.zeros(getattr(model, "num_experts", 0), dtype=torch.long)
     with torch.no_grad():
         for batch in loader:
             input_ids = batch["input_ids"].to(device)
             attention_mask = batch["attention_mask"].to(device)
             labels = batch["labels"].to(device)
-            logits, _ = model(input_ids, attention_mask)
+            logits, routing = model(input_ids, attention_mask)
             total_loss += F.cross_entropy(logits, labels, reduction="sum").item()
-            total_correct += (logits.argmax(dim=-1) == labels).sum().item()
             total_examples += labels.numel()
-    return total_loss / total_examples, total_correct / total_examples
+            predictions.extend(logits.argmax(dim=-1).cpu().tolist())
+            labels_all.extend(labels.cpu().tolist())
+            routing_counts = _routing_counts(model, routing, routing_counts)
+    return {
+        "loss": total_loss / total_examples,
+        **classification_metrics(labels_all, predictions, label_names),
+        "routing_counts": routing_counts.tolist(),
+    }
 
 
-def train_epoch(model, loader, optimizer, device, balance_factor, epoch, total_epochs):
+def train_epoch(model, loader, optimizer, device, balance_factor, class_weights, label_names, epoch, total_epochs):
     model.train()
     total_loss = 0.0
-    total_correct = 0
     total_examples = 0
+    predictions, labels_all = [], []
+    routing_counts = torch.zeros(getattr(model, "num_experts", 0), dtype=torch.long)
     progress = tqdm(
         loader,
         desc=f"Epoch {epoch}/{total_epochs}",
@@ -63,17 +79,23 @@ def train_epoch(model, loader, optimizer, device, balance_factor, epoch, total_e
         labels = batch["labels"].to(device)
         optimizer.zero_grad(set_to_none=True)
         logits, routing = model(input_ids, attention_mask)
-        classification_loss = F.cross_entropy(logits, labels)
+        classification_loss = F.cross_entropy(logits, labels, weight=class_weights)
         balance_loss = routing["balance_loss"]
         loss = classification_loss + balance_factor * balance_loss
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()
         total_loss += loss.item() * labels.size(0)
-        total_correct += (logits.argmax(dim=-1) == labels).sum().item()
         total_examples += labels.size(0)
-        progress.set_postfix(loss=f"{total_loss / total_examples:.4f}", accuracy=f"{total_correct / total_examples:.3f}")
-    return total_loss / total_examples, total_correct / total_examples
+        predictions.extend(logits.argmax(dim=-1).detach().cpu().tolist())
+        labels_all.extend(labels.detach().cpu().tolist())
+        routing_counts = _routing_counts(model, routing, routing_counts)
+        progress.set_postfix(loss=f"{total_loss / total_examples:.4f}")
+    return {
+        "loss": total_loss / total_examples,
+        **classification_metrics(labels_all, predictions, label_names),
+        "routing_counts": routing_counts.tolist(),
+    }
 
 
 def maybe_start_wandb(config):
@@ -130,6 +152,26 @@ def create_run_id(smoke_test, requested_run_id=None):
 
 def resolve_output_path(configured_path, environment_name):
     return Path(os.getenv(environment_name, configured_path)).expanduser()
+
+
+def git_commit() -> str | None:
+    try:
+        return subprocess.run(
+            ["git", "rev-parse", "HEAD"], text=True, capture_output=True, check=True
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return None
+
+
+def resolve_class_weights(mode, counts, device):
+    if mode == "none":
+        return None
+    if mode != "balanced":
+        raise ValueError("training.class_weighting must be 'none' or 'balanced'.")
+    counts_tensor = torch.tensor(counts, dtype=torch.float, device=device)
+    if (counts_tensor == 0).any():
+        raise ValueError("Cannot calculate balanced weights when a training label has no examples.")
+    return counts_tensor.sum() / (len(counts) * counts_tensor)
 
 
 def flatten_hyperparameters(values, prefix=""):
@@ -195,6 +237,15 @@ def main() -> None:
     model_config = {**config["model"], "pad_token_id": bundle.tokenizer.pad_token_id or 0}
     model = ViHSDMoEClassifier(bundle.tokenizer.vocab_size, bundle.num_labels, model_config).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=float(config["training"]["learning_rate"]), weight_decay=float(config["training"]["weight_decay"]))
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer,
+        mode="max",
+        factor=float(config["training"]["scheduler_factor"]),
+        patience=int(config["training"]["scheduler_patience"]),
+    )
+    class_weights = resolve_class_weights(
+        config["training"]["class_weighting"], bundle.label_counts[config["dataset"]["train_split"]], device
+    )
     balance_factor = float(config["routing"]["load_balance_loss_factor"])
     checkpoint_root = resolve_output_path(config["paths"]["checkpoint_dir"], "CHECKPOINT_DIR")
     checkpoint_dir = checkpoint_root / run_id
@@ -210,59 +261,92 @@ def main() -> None:
         json.dumps(create_hyperparameters_log(config, run_id, smoke_test), indent=2, sort_keys=True),
         encoding="utf-8",
     )
+    (results_dir / "run_metadata.json").write_text(
+        json.dumps(
+            {
+                "run_id": run_id,
+                "git_commit": git_commit(),
+                "device": str(device),
+                "torch_version": torch.__version__,
+                "gpu_name": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
+                "split_sizes": bundle.split_sizes,
+                "label_names": bundle.label_names,
+                "label_counts": bundle.label_counts,
+                "class_weights": class_weights.tolist() if class_weights is not None else None,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
     wandb_run = maybe_start_wandb(config)
     print(f"Training profile: {'smoke test' if smoke_test else 'full run'}")
     print(f"Run ID: {run_id}")
-    best_accuracy = -1.0
+    selection_metric = config["training"]["selection_metric"]
+    best_score = float("-inf")
+    epochs_without_improvement = 0
     best_record = None
     history = []
     total_epochs = int(config["training"]["epochs"])
     for epoch in range(total_epochs):
-        train_loss, train_accuracy = train_epoch(
+        train_metrics = train_epoch(
             model,
             bundle.loaders["train"],
             optimizer,
             device,
             balance_factor,
+            class_weights,
+            bundle.label_names,
             epoch + 1,
             total_epochs,
         )
-        validation_loss, validation_accuracy = evaluate(model, bundle.loaders["validation"], device)
-        record = {"epoch": epoch + 1, "train_loss": train_loss, "train_accuracy": train_accuracy, "validation_loss": validation_loss, "validation_accuracy": validation_accuracy}
+        validation_metrics = evaluate(model, bundle.loaders["validation"], device, bundle.label_names)
+        record = {
+            "epoch": epoch + 1,
+            "learning_rate": optimizer.param_groups[0]["lr"],
+            "train": train_metrics,
+            "validation": validation_metrics,
+        }
         history.append(record)
         print(record)
         if wandb_run is not None:
             wandb_run.log(record)
-        if validation_accuracy > best_accuracy:
-            best_accuracy = validation_accuracy
+        score = validation_metrics.get(selection_metric)
+        if score is None:
+            raise KeyError(f"Unknown training.selection_metric {selection_metric!r}.")
+        scheduler.step(score)
+        if score > best_score:
+            best_score = score
+            epochs_without_improvement = 0
             save_file({name: tensor.detach().cpu().contiguous() for name, tensor in model.state_dict().items()}, str(checkpoint_dir / "vihsd_moe_best.safetensors"))
             (checkpoint_dir / "vihsd_moe_metadata.json").write_text(json.dumps({"run_id": run_id, "label_names": bundle.label_names, "model_config": model_config}, indent=2), encoding="utf-8")
             best_record = record
+        else:
+            epochs_without_improvement += 1
+            if epochs_without_improvement >= int(config["training"]["early_stopping_patience"]):
+                print(f"Early stopping at epoch {epoch + 1}; best validation {selection_metric}: {best_score:.4f}")
+                break
     (results_dir / "training_history.json").write_text(json.dumps(history, indent=2), encoding="utf-8")
     if best_record is None:
         raise RuntimeError("Training produced no checkpoint; set training.epochs to at least 1.")
     best_checkpoint_path = checkpoint_dir / "vihsd_moe_best.safetensors"
     model.load_state_dict(load_file(str(best_checkpoint_path), device=str(device)))
-    test_loss, test_accuracy = evaluate(model, bundle.loaders["test"], device)
+    test_metrics = None
+    if config["training"].get("evaluate_test", True):
+        test_metrics = evaluate(model, bundle.loaders["test"], device, bundle.label_names)
     run_metrics = {
         "run_id": run_id,
         "best_epoch": best_record["epoch"],
-        "train": {
-            "loss": best_record["train_loss"],
-            "accuracy": best_record["train_accuracy"],
-        },
-        "validation": {
-            "loss": best_record["validation_loss"],
-            "accuracy": best_record["validation_accuracy"],
-        },
-        "test": {"loss": test_loss, "accuracy": test_accuracy},
+        "selection_metric": selection_metric,
+        "train": best_record["train"],
+        "validation": best_record["validation"],
+        "test": test_metrics,
     }
     (results_dir / "run_metrics.json").write_text(
         json.dumps(run_metrics, indent=2), encoding="utf-8"
     )
     print(json.dumps(run_metrics, indent=2))
-    if wandb_run is not None:
-        wandb_run.log({"best_epoch": best_record["epoch"], "test_loss": test_loss, "test_accuracy": test_accuracy})
+    if wandb_run is not None and test_metrics is not None:
+        wandb_run.log({"best_epoch": best_record["epoch"], "test_loss": test_metrics["loss"], "test_accuracy": test_metrics["accuracy"], "test_macro_f1": test_metrics["macro_f1"]})
     (checkpoint_root / "latest_run.json").write_text(json.dumps({"run_id": run_id, "checkpoint": str(checkpoint_dir / "vihsd_moe_best.safetensors")}, indent=2), encoding="utf-8")
     (results_root / "latest_run.json").write_text(json.dumps({"run_id": run_id, "results_dir": str(results_dir)}, indent=2), encoding="utf-8")
     if wandb_run is not None:

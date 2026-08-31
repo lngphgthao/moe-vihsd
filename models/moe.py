@@ -43,7 +43,8 @@ class ViHSDMoEClassifier(nn.Module):
     def __init__(self, vocab_size: int, num_labels: int, config: dict) -> None:
         super().__init__()
         model_dim = int(config["model_dim"])
-        self.num_experts = int(config["num_experts"])
+        self.use_moe = bool(config.get("use_moe", True))
+        self.num_experts = int(config["num_experts"]) if self.use_moe else 0
         self.embedding = nn.Embedding(vocab_size, model_dim, padding_idx=int(config["pad_token_id"]))
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=model_dim,
@@ -54,13 +55,16 @@ class ViHSDMoEClassifier(nn.Module):
             activation="gelu",
         )
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=int(config["num_layers"]))
-        self.moe = SparseMoE(
-            model_dim=model_dim,
-            expert_dim=int(config["expert_hidden_dim"]),
-            num_experts=self.num_experts,
-            top_k=int(config["top_k"]),
-            dropout=float(config["dropout"]),
-        )
+        if self.use_moe:
+            self.moe = SparseMoE(
+                model_dim=model_dim,
+                expert_dim=int(config["expert_hidden_dim"]),
+                num_experts=self.num_experts,
+                top_k=int(config["top_k"]),
+                dropout=float(config["dropout"]),
+            )
+        else:
+            self.moe = None
         self.norm = nn.LayerNorm(model_dim)
         self.classifier = nn.Linear(model_dim, num_labels)
 
@@ -70,7 +74,16 @@ class ViHSDMoEClassifier(nn.Module):
         hidden = self.encoder(hidden, src_key_padding_mask=padding_mask)
         mask = attention_mask.unsqueeze(-1).float()
         pooled = (hidden * mask).sum(dim=1) / mask.sum(dim=1).clamp_min(1.0)
-        moe_input = self.norm(pooled).unsqueeze(1)
-        moe_output, routing = self.moe(moe_input)
-        logits = self.classifier(self.norm(pooled + moe_output.squeeze(1)))
+        if self.moe is not None:
+            moe_input = self.norm(pooled).unsqueeze(1)
+            moe_output, routing = self.moe(moe_input)
+            hidden = self.norm(pooled + moe_output.squeeze(1))
+        else:
+            hidden = self.norm(pooled)
+            routing = {
+                "top_indices": torch.empty((pooled.size(0), 0), dtype=torch.long, device=pooled.device),
+                "probabilities": torch.empty((pooled.size(0), 0), device=pooled.device),
+                "balance_loss": pooled.new_zeros(()),
+            }
+        logits = self.classifier(hidden)
         return logits, routing

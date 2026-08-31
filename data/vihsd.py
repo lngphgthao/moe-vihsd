@@ -19,6 +19,8 @@ class DatasetBundle:
     loaders: dict[str, DataLoader]
     label_names: list[str]
     num_labels: int
+    split_sizes: dict[str, int]
+    label_counts: dict[str, list[int]]
 
 
 def _ensure_splits(dataset: DatasetDict, config: dict) -> DatasetDict:
@@ -81,9 +83,18 @@ def prepare_data(config: dict) -> DatasetBundle:
         train_name = config["train_split"]
         tokenized[train_name] = tokenized[train_name].select(range(min(limit, len(tokenized[train_name]))))
 
+    split_names = (config["train_split"], config["validation_split"], config["test_split"])
+    split_sizes = {split_name: len(tokenized[split_name]) for split_name in split_names}
+    label_counts = {
+        split_name: torch.bincount(
+            torch.tensor(tokenized[split_name]["labels"], dtype=torch.long), minlength=len(label_names)
+        ).tolist()
+        for split_name in split_names
+    }
+
     loaders = {
         "train": DataLoader(tokenized[config["train_split"]], batch_size=config["batch_size"], shuffle=True, num_workers=config["num_workers"]),
         "validation": DataLoader(tokenized[config["validation_split"]], batch_size=config["batch_size"], num_workers=config["num_workers"]),
         "test": DataLoader(tokenized[config["test_split"]], batch_size=config["batch_size"], num_workers=config["num_workers"]),
     }
-    return DatasetBundle(tokenizer, loaders, label_names, len(label_names))
+    return DatasetBundle(tokenizer, loaders, label_names, len(label_names), split_sizes, label_counts)
