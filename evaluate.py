@@ -21,7 +21,7 @@ from tqdm.auto import tqdm
 
 from data.vihsd import prepare_data
 from metrics import compute_classification_metrics, format_classification_report
-from models.moe import ViHSDMoEClassifier
+from models.factory import build_model, standardize_model_output
 
 
 def resolve_output_path(configured_path, environment_name):
@@ -52,7 +52,8 @@ def main() -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     bundle = prepare_data({**config["dataset"], **config["training"]})
     model_config = {**config["model"], "pad_token_id": bundle.tokenizer.pad_token_id or 0}
-    model = ViHSDMoEClassifier(bundle.tokenizer.vocab_size, bundle.num_labels, model_config).to(device)
+    model_config.setdefault("architecture", "current_moe")
+    model = build_model(model_config, bundle.tokenizer.vocab_size, bundle.num_labels).to(device)
     model.load_state_dict(load_file(str(checkpoint_path), device=str(device)))
     model.eval()
     predictions = []
@@ -66,11 +67,12 @@ def main() -> None:
             input_ids = batch["input_ids"].to(device)
             attention_mask = batch["attention_mask"].to(device)
             labels = batch["labels"].to(device)
-            logits, routing = model(input_ids, attention_mask)
+            logits, aux = standardize_model_output(model(input_ids, attention_mask))
             predicted = logits.argmax(dim=-1)
             total_loss += F.cross_entropy(logits, labels, reduction="sum").item()
             total_examples += labels.numel()
-            routing_counts += torch.bincount(routing["top_indices"].reshape(-1).cpu(), minlength=model.num_experts)
+            if "top_indices" in aux:
+                routing_counts += torch.bincount(aux["top_indices"].reshape(-1).cpu(), minlength=model.num_experts)
             preds_cpu = predicted.cpu().tolist()
             labels_cpu = labels.cpu().tolist()
             all_preds.extend(preds_cpu)

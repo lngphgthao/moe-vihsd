@@ -24,6 +24,7 @@ training:
     epochs: 1
     max_train_samples: 2000
 model:
+  architecture: current_moe
   model_dim: 128
   expert_hidden_dim: 512
   num_attention_heads: 4

@@ -24,7 +24,7 @@ from tqdm.auto import tqdm
 
 from data.vihsd import prepare_data
 from metrics import compute_classification_metrics
-from models.moe import ViHSDMoEClassifier
+from models.factory import build_model, standardize_model_output
 
 
 def set_seed(seed: int) -> None:
@@ -64,7 +64,7 @@ def evaluate(model, loader, device, label_names=None):
     }
 
 
-def train_epoch(model, loader, optimizer, device, balance_factor, epoch, total_epochs, label_names=None):
+def train_epoch(model, loader, optimizer, device, balance_factor, epoch, total_epochs, config, label_names=None):
     model.train()
     total_loss = 0.0
     total_correct = 0
@@ -83,9 +83,9 @@ def train_epoch(model, loader, optimizer, device, balance_factor, epoch, total_e
         attention_mask = batch["attention_mask"].to(device)
         labels = batch["labels"].to(device)
         optimizer.zero_grad(set_to_none=True)
-        logits, routing = model(input_ids, attention_mask)
-        classification_loss = F.cross_entropy(logits, labels)
-        balance_loss = routing["balance_loss"]
+        logits, aux = standardize_model_output(model(input_ids, attention_mask))
+        classification_loss = compute_task_loss(logits, labels, config)
+        balance_loss = aux.get("balance_loss", 0.0)
         loss = classification_loss + balance_factor * balance_loss
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
@@ -107,6 +107,32 @@ def train_epoch(model, loader, optimizer, device, balance_factor, epoch, total_e
         "weighted_f1": cls_metrics["weighted_f1"],
         "per_class_f1": cls_metrics["per_class_f1"],
     }
+
+
+def compute_task_loss(logits, labels, config):
+    """Return the task loss for a classification head while keeping the MoE balance
+    term separate so all architectures share one training loop."""
+    training_config = config.get("training", {})
+    loss_type = str(training_config.get("loss_type", "cross_entropy")).lower()
+    class_weights = training_config.get("class_weights")
+
+    if class_weights is not None:
+        weight_tensor = torch.tensor(class_weights, dtype=logits.dtype, device=logits.device)
+        base_loss = F.cross_entropy(logits, labels, weight=weight_tensor)
+    else:
+        base_loss = F.cross_entropy(logits, labels)
+
+    if loss_type == "focal":
+        gamma = float(training_config.get("focal_gamma", 2.0))
+        per_example_loss = F.cross_entropy(logits, labels, reduction="none")
+        probs = torch.softmax(logits, dim=-1)
+        target_probs = probs.gather(1, labels.unsqueeze(1)).squeeze(1)
+        if class_weights is not None:
+            per_example_loss = per_example_loss * weight_tensor[labels]
+        focal_loss = ((1.0 - target_probs).clamp_min(0.0) ** gamma) * per_example_loss
+        return focal_loss.mean()
+
+    return base_loss
 
 
 def maybe_start_wandb(config):
@@ -186,9 +212,11 @@ def create_hyperparameters_log(config, run_id, smoke_test):
         "model": config["model"],
         "routing": config["routing"],
     }
+    architecture = config.get("model", {}).get("architecture", "current_moe")
     return {
         "run_id": run_id,
         "profile": "smoke" if smoke_test else "full",
+        "architecture": architecture,
         "hyperparameters": hyperparameters,
         "flat_hyperparameters": flatten_hyperparameters(hyperparameters),
     }
@@ -226,7 +254,8 @@ def main() -> None:
     data_config = {**config["dataset"], **config["training"]}
     bundle = prepare_data(data_config)
     model_config = {**config["model"], "pad_token_id": bundle.tokenizer.pad_token_id or 0}
-    model = ViHSDMoEClassifier(bundle.tokenizer.vocab_size, bundle.num_labels, model_config).to(device)
+    model_config.setdefault("architecture", "current_moe")
+    model = build_model(model_config, bundle.tokenizer.vocab_size, bundle.num_labels).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=float(config["training"]["learning_rate"]), weight_decay=float(config["training"]["weight_decay"]))
     balance_factor = float(config["routing"]["load_balance_loss_factor"])
     checkpoint_root = resolve_output_path(config["paths"]["checkpoint_dir"], "CHECKPOINT_DIR")
@@ -259,6 +288,7 @@ def main() -> None:
             balance_factor,
             epoch + 1,
             total_epochs,
+            config,
             label_names=bundle.label_names,
         )
         val_metrics = evaluate(model, bundle.loaders["validation"], device, label_names=bundle.label_names)
