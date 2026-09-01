@@ -28,6 +28,8 @@ training:
     max_train_samples: 2000
 model:
   architecture: current_moe
+  pretrained_model_name: vinai/phobert-base
+  freeze_backbone: false
   model_dim: 128
   expert_hidden_dim: 512
   num_attention_heads: 4

@@ -6,10 +6,12 @@ from typing import Any
 
 from models.moe import ViHSDMoEClassifier
 from models.moe_v2 import StrongerViHSDMoEClassifier
+from models.pretrained_backbone import PretrainedBackboneClassifier
 
 MODEL_REGISTRY: dict[str, Any] = {
     "current_moe": ViHSDMoEClassifier,
     "stronger_moe": StrongerViHSDMoEClassifier,
+    "pretrained_backbone": PretrainedBackboneClassifier,
 }
 
 
