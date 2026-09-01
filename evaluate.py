@@ -14,6 +14,7 @@ from safetensors.torch import load_file
 from tqdm.auto import tqdm
 
 from data.vihsd import prepare_data
+from metrics import compute_classification_metrics, format_classification_report
 from models.moe import ViHSDMoEClassifier
 
 
@@ -49,8 +50,9 @@ def main() -> None:
     model.load_state_dict(load_file(str(checkpoint_path), device=str(device)))
     model.eval()
     predictions = []
+    all_preds = []
+    all_labels = []
     total_loss = 0.0
-    total_correct = 0
     total_examples = 0
     routing_counts = torch.zeros(model.num_experts, dtype=torch.long)
     with torch.no_grad():
@@ -61,11 +63,25 @@ def main() -> None:
             logits, routing = model(input_ids, attention_mask)
             predicted = logits.argmax(dim=-1)
             total_loss += F.cross_entropy(logits, labels, reduction="sum").item()
-            total_correct += (predicted == labels).sum().item()
             total_examples += labels.numel()
             routing_counts += torch.bincount(routing["top_indices"].reshape(-1).cpu(), minlength=model.num_experts)
-            predictions.extend({"prediction": int(prediction), "label": int(label)} for prediction, label in zip(predicted.cpu(), labels.cpu()))
-    results = {"loss": total_loss / total_examples, "accuracy": total_correct / total_examples, "label_names": bundle.label_names, "routing_counts": routing_counts.tolist(), "predictions": predictions}
+            preds_cpu = predicted.cpu().tolist()
+            labels_cpu = labels.cpu().tolist()
+            all_preds.extend(preds_cpu)
+            all_labels.extend(labels_cpu)
+            predictions.extend({"prediction": int(p), "label": int(l)} for p, l in zip(preds_cpu, labels_cpu))
+    cls_metrics = compute_classification_metrics(all_labels, all_preds, label_names=bundle.label_names)
+    results = {
+        "loss": (total_loss / total_examples) if total_examples > 0 else 0.0,
+        "accuracy": cls_metrics["accuracy"],
+        "macro_f1": cls_metrics["macro_f1"],
+        "weighted_f1": cls_metrics["weighted_f1"],
+        "per_class_f1": cls_metrics["per_class_f1"],
+        "classification_report": cls_metrics["classification_report"],
+        "label_names": bundle.label_names,
+        "routing_counts": routing_counts.tolist(),
+        "predictions": predictions,
+    }
     results_root = resolve_output_path(config["paths"]["results_dir"], "RESULTS_DIR")
     run_id = checkpoint_path.parent.name
     results_dir = results_root / run_id
@@ -74,6 +90,9 @@ def main() -> None:
     output_path.write_text(json.dumps(results, indent=2), encoding="utf-8")
     print(f"Test loss: {results['loss']:.4f}")
     print(f"Test accuracy: {results['accuracy']:.4f}")
+    print(f"Test macro F1: {results['macro_f1']:.4f}")
+    print(f"Test weighted F1: {results['weighted_f1']:.4f}")
+    print("\nClassification Report:\n" + format_classification_report(all_labels, all_preds, label_names=bundle.label_names))
     print(f"Run ID: {run_id}")
     print(f"Saved predictions: {output_path}")
 

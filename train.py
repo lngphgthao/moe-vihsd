@@ -17,6 +17,7 @@ from safetensors.torch import load_file, save_file
 from tqdm.auto import tqdm
 
 from data.vihsd import prepare_data
+from metrics import compute_classification_metrics
 from models.moe import ViHSDMoEClassifier
 
 
@@ -28,11 +29,12 @@ def set_seed(seed: int) -> None:
         torch.cuda.manual_seed_all(seed)
 
 
-def evaluate(model, loader, device):
+def evaluate(model, loader, device, label_names=None):
     model.eval()
     total_loss = 0.0
-    total_correct = 0
     total_examples = 0
+    all_preds = []
+    all_labels = []
     with torch.no_grad():
         for batch in loader:
             input_ids = batch["input_ids"].to(device)
@@ -40,16 +42,29 @@ def evaluate(model, loader, device):
             labels = batch["labels"].to(device)
             logits, _ = model(input_ids, attention_mask)
             total_loss += F.cross_entropy(logits, labels, reduction="sum").item()
-            total_correct += (logits.argmax(dim=-1) == labels).sum().item()
             total_examples += labels.numel()
-    return total_loss / total_examples, total_correct / total_examples
+            preds = logits.argmax(dim=-1).cpu().tolist()
+            labs = labels.cpu().tolist()
+            all_preds.extend(preds)
+            all_labels.extend(labs)
+    cls_metrics = compute_classification_metrics(all_labels, all_preds, label_names=label_names)
+    avg_loss = (total_loss / total_examples) if total_examples > 0 else 0.0
+    return {
+        "loss": avg_loss,
+        "accuracy": cls_metrics["accuracy"],
+        "macro_f1": cls_metrics["macro_f1"],
+        "weighted_f1": cls_metrics["weighted_f1"],
+        "per_class_f1": cls_metrics["per_class_f1"],
+    }
 
 
-def train_epoch(model, loader, optimizer, device, balance_factor, epoch, total_epochs):
+def train_epoch(model, loader, optimizer, device, balance_factor, epoch, total_epochs, label_names=None):
     model.train()
     total_loss = 0.0
     total_correct = 0
     total_examples = 0
+    all_preds = []
+    all_labels = []
     progress = tqdm(
         loader,
         desc=f"Epoch {epoch}/{total_epochs}",
@@ -70,10 +85,22 @@ def train_epoch(model, loader, optimizer, device, balance_factor, epoch, total_e
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()
         total_loss += loss.item() * labels.size(0)
+        preds = logits.argmax(dim=-1).cpu().tolist()
+        labs = labels.cpu().tolist()
+        all_preds.extend(preds)
+        all_labels.extend(labs)
         total_correct += (logits.argmax(dim=-1) == labels).sum().item()
         total_examples += labels.size(0)
         progress.set_postfix(loss=f"{total_loss / total_examples:.4f}", accuracy=f"{total_correct / total_examples:.3f}")
-    return total_loss / total_examples, total_correct / total_examples
+    cls_metrics = compute_classification_metrics(all_labels, all_preds, label_names=label_names)
+    avg_loss = (total_loss / total_examples) if total_examples > 0 else 0.0
+    return {
+        "loss": avg_loss,
+        "accuracy": cls_metrics["accuracy"],
+        "macro_f1": cls_metrics["macro_f1"],
+        "weighted_f1": cls_metrics["weighted_f1"],
+        "per_class_f1": cls_metrics["per_class_f1"],
+    }
 
 
 def maybe_start_wandb(config):
@@ -213,12 +240,12 @@ def main() -> None:
     wandb_run = maybe_start_wandb(config)
     print(f"Training profile: {'smoke test' if smoke_test else 'full run'}")
     print(f"Run ID: {run_id}")
-    best_accuracy = -1.0
+    best_macro_f1 = -1.0
     best_record = None
     history = []
     total_epochs = int(config["training"]["epochs"])
     for epoch in range(total_epochs):
-        train_loss, train_accuracy = train_epoch(
+        train_metrics = train_epoch(
             model,
             bundle.loaders["train"],
             optimizer,
@@ -226,43 +253,85 @@ def main() -> None:
             balance_factor,
             epoch + 1,
             total_epochs,
+            label_names=bundle.label_names,
         )
-        validation_loss, validation_accuracy = evaluate(model, bundle.loaders["validation"], device)
-        record = {"epoch": epoch + 1, "train_loss": train_loss, "train_accuracy": train_accuracy, "validation_loss": validation_loss, "validation_accuracy": validation_accuracy}
+        val_metrics = evaluate(model, bundle.loaders["validation"], device, label_names=bundle.label_names)
+        record = {
+            "epoch": epoch + 1,
+            "train_loss": train_metrics["loss"],
+            "train_accuracy": train_metrics["accuracy"],
+            "train_macro_f1": train_metrics["macro_f1"],
+            "train_weighted_f1": train_metrics["weighted_f1"],
+            "validation_loss": val_metrics["loss"],
+            "validation_accuracy": val_metrics["accuracy"],
+            "validation_macro_f1": val_metrics["macro_f1"],
+            "validation_weighted_f1": val_metrics["weighted_f1"],
+        }
         history.append(record)
         print(record)
         if wandb_run is not None:
             wandb_run.log(record)
-        if validation_accuracy > best_accuracy:
-            best_accuracy = validation_accuracy
-            save_file({name: tensor.detach().cpu().contiguous() for name, tensor in model.state_dict().items()}, str(checkpoint_dir / "vihsd_moe_best.safetensors"))
-            (checkpoint_dir / "vihsd_moe_metadata.json").write_text(json.dumps({"run_id": run_id, "label_names": bundle.label_names, "model_config": model_config}, indent=2), encoding="utf-8")
-            best_record = record
+        if val_metrics["macro_f1"] > best_macro_f1:
+            best_macro_f1 = val_metrics["macro_f1"]
+            save_file(
+                {name: tensor.detach().cpu().contiguous() for name, tensor in model.state_dict().items()},
+                str(checkpoint_dir / "vihsd_moe_best.safetensors"),
+            )
+            (checkpoint_dir / "vihsd_moe_metadata.json").write_text(
+                json.dumps(
+                    {"run_id": run_id, "label_names": bundle.label_names, "model_config": model_config},
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            best_record = {
+                **record,
+                "train_per_class_f1": train_metrics["per_class_f1"],
+                "validation_per_class_f1": val_metrics["per_class_f1"],
+            }
     (results_dir / "training_history.json").write_text(json.dumps(history, indent=2), encoding="utf-8")
     if best_record is None:
         raise RuntimeError("Training produced no checkpoint; set training.epochs to at least 1.")
     best_checkpoint_path = checkpoint_dir / "vihsd_moe_best.safetensors"
     model.load_state_dict(load_file(str(best_checkpoint_path), device=str(device)))
-    test_loss, test_accuracy = evaluate(model, bundle.loaders["test"], device)
+    test_metrics = evaluate(model, bundle.loaders["test"], device, label_names=bundle.label_names)
     run_metrics = {
         "run_id": run_id,
         "best_epoch": best_record["epoch"],
         "train": {
             "loss": best_record["train_loss"],
             "accuracy": best_record["train_accuracy"],
+            "macro_f1": best_record["train_macro_f1"],
+            "weighted_f1": best_record["train_weighted_f1"],
+            "per_class_f1": best_record.get("train_per_class_f1", {}),
         },
         "validation": {
             "loss": best_record["validation_loss"],
             "accuracy": best_record["validation_accuracy"],
+            "macro_f1": best_record["validation_macro_f1"],
+            "weighted_f1": best_record["validation_weighted_f1"],
+            "per_class_f1": best_record.get("validation_per_class_f1", {}),
         },
-        "test": {"loss": test_loss, "accuracy": test_accuracy},
+        "test": {
+            "loss": test_metrics["loss"],
+            "accuracy": test_metrics["accuracy"],
+            "macro_f1": test_metrics["macro_f1"],
+            "weighted_f1": test_metrics["weighted_f1"],
+            "per_class_f1": test_metrics["per_class_f1"],
+        },
     }
     (results_dir / "run_metrics.json").write_text(
         json.dumps(run_metrics, indent=2), encoding="utf-8"
     )
     print(json.dumps(run_metrics, indent=2))
     if wandb_run is not None:
-        wandb_run.log({"best_epoch": best_record["epoch"], "test_loss": test_loss, "test_accuracy": test_accuracy})
+        wandb_run.log({
+            "best_epoch": best_record["epoch"],
+            "test_loss": test_metrics["loss"],
+            "test_accuracy": test_metrics["accuracy"],
+            "test_macro_f1": test_metrics["macro_f1"],
+            "test_weighted_f1": test_metrics["weighted_f1"],
+        })
     (checkpoint_root / "latest_run.json").write_text(json.dumps({"run_id": run_id, "checkpoint": str(checkpoint_dir / "vihsd_moe_best.safetensors")}, indent=2), encoding="utf-8")
     (results_root / "latest_run.json").write_text(json.dumps({"run_id": run_id, "results_dir": str(results_dir)}, indent=2), encoding="utf-8")
     if wandb_run is not None:
