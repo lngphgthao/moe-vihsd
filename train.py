@@ -6,8 +6,14 @@ import argparse
 import json
 import os
 import random
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+# Ensure repository root is on sys.path for Colab notebook execution
+REPO_ROOT = str(Path(__file__).resolve().parent)
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
 
 import numpy as np
 import torch
