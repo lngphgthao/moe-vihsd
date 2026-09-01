@@ -8,9 +8,20 @@ import os
 
 import torch
 from datasets import ClassLabel, DatasetDict, load_dataset
+from datasets import config as datasets_config
 from dotenv import load_dotenv
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
+
+# `datasets` checks the optional torchvision VideoReader path even for text-only
+# workloads. Some Colab installs expose torchvision without the required video API,
+# which breaks dataset torch-formatting. Disable that optional branch when it is not
+# available so the text pipeline still works.
+try:
+    import torchvision  # noqa: F401
+    from torchvision.io import VideoReader  # noqa: F401
+except Exception:
+    datasets_config.TORCHVISION_AVAILABLE = False
 
 
 @dataclass
