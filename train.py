@@ -256,6 +256,17 @@ def main() -> None:
     model_config = {**config["model"], "pad_token_id": bundle.tokenizer.pad_token_id or 0}
     model_config.setdefault("architecture", "current_moe")
     model = build_model(model_config, bundle.tokenizer.vocab_size, bundle.num_labels).to(device)
+    print("MoE architecture:")
+    print(f"  variant: {model_config['architecture']}")
+    print(f"  model_dim: {model_config.get('model_dim')}")
+    print(f"  expert_hidden_dim: {model_config.get('expert_hidden_dim')}")
+    print(f"  num_experts: {model_config.get('num_experts')}")
+    print(f"  top_k: {model_config.get('top_k')}")
+    print(f"  num_layers: {model_config.get('num_layers')}")
+    print(f"  dropout: {model_config.get('dropout')}")
+    if model_config["architecture"] == "pretrained_backbone":
+        print(f"  pretrained_model_name: {model_config.get('pretrained_model_name')}")
+        print(f"  freeze_backbone: {model_config.get('freeze_backbone')}")
     optimizer = torch.optim.AdamW(model.parameters(), lr=float(config["training"]["learning_rate"]), weight_decay=float(config["training"]["weight_decay"]))
     balance_factor = float(config["routing"]["load_balance_loss_factor"])
     checkpoint_root = resolve_output_path(config["paths"]["checkpoint_dir"], "CHECKPOINT_DIR")

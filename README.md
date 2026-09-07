@@ -10,6 +10,7 @@ Available architecture names:
 
 - `current_moe` — the original baseline implementation
 - `stronger_moe` — a stronger multi-expert variant in [models/moe_v2.py](models/moe_v2.py)
+- `pretrained_backbone` — PhoBERT contextual encoder followed by the MoE block in [models/pretrained_backbone.py](models/pretrained_backbone.py)
 
 You can switch architectures through the config or by `--set` overrides without editing the code path used by training and evaluation.
 
@@ -18,6 +19,7 @@ Example:
 ```bash
 python train.py --config configs/vihsd.yaml --set model.architecture=current_moe --run-id baseline-current-moe
 python train.py --config configs/vihsd.yaml --set model.architecture=stronger_moe --run-id variant-stronger-moe
+python train.py --config configs/vihsd.yaml --set model.architecture=pretrained_backbone --run-id phobert-moe
 ```
 
 The YAML default is:
@@ -31,27 +33,11 @@ model:
 
 Open `main.ipynb` in Google Colab. The notebook mounts Drive, installs `requirements.txt`, runs `train.py`, and runs `evaluate.py`.
 
-For repeated experiments, edit the `EXPERIMENT_OVERRIDES` cell in the notebook instead of editing and pushing `configs/vihsd.yaml`. It passes only the changed values to the training command, so the versioned YAML remains the shared baseline. Each checkpoint folder stores the exact `resolved_config.yaml`, and evaluation automatically uses it.
+The notebook prepares the Colab runtime and provides editable shell-command examples for training and evaluation. Run each command manually, using a unique `--run-id` and repeatable `--set` overrides instead of editing and pushing `configs/vihsd.yaml`. Each checkpoint folder stores the exact `resolved_config.yaml`, and evaluation automatically uses it.
 
-## Experiment overrides
+## Manual experiment commands
 
-An override uses the same path as a value in `configs/vihsd.yaml`, with sections separated by dots. The YAML file is never modified: omitted values keep their defaults.
-
-For example, this Colab configuration compares the stronger MoE variant with the default baseline:
-
-```python
-EXPERIMENT_OVERRIDES = {
-    "model.architecture": "stronger_moe",
-    "training.epochs": 10,
-    "training.learning_rate": 0.0001,
-    "model.num_experts": 8,
-    "model.top_k": 2,
-}
-RUN_ID = "stronger-moe-8-2"
-SMOKE_TEST = False
-```
-
-Set `EXPERIMENT_OVERRIDES = {}` to run the unmodified YAML defaults. Use a unique `RUN_ID` for a readable experiment folder, or set it to `None` for an automatic UTC timestamp.
+Run `train.py` and `evaluate.py` manually from the notebook command cells or a terminal. Use `--set section.key=value` for temporary YAML overrides; the YAML file is never modified. Use a unique `--run-id` for each experiment. The notebook contains complete argument documentation and examples.
 
 ### What to tune first
 
@@ -130,7 +116,7 @@ Set `logging.use_wandb: true` in the YAML to enable logging. In Colab, create a 
 
 To keep experiments comparable, follow the same order for every run:
 
-1. choose one architecture (`current_moe` or `stronger_moe`)
+1. choose one architecture (`current_moe`, `stronger_moe`, or `pretrained_backbone`)
 2. set a unique `--run-id`
 3. save the resolved config automatically in the checkpoint folder
 4. evaluate with the same `evaluate.py` command

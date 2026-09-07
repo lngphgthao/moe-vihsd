@@ -18,9 +18,7 @@ MODEL_REGISTRY: dict[str, Any] = {
 def standardize_model_output(model_output):
     """Normalize model output to the shared contract: (logits, aux_dict).
 
-    Non-MoE models can return a plain tensor or a tuple without metrics; this helper
-    converts them to a dictionary-based auxiliary payload so the training loop stays
-    identical across architectures.
+    This helper keeps the shared tuple/dictionary contract across all architectures.
     """
     if not isinstance(model_output, tuple):
         return model_output, {}
@@ -40,8 +38,8 @@ def standardize_model_output(model_output):
 def build_model(config: dict, vocab_size: int, num_labels: int):
     """Instantiate a model from a config-driven architecture name.
 
-    The default architecture remains the current MoE model so the existing training
-    workflow continues to work without any change in semantics.
+    Every registered architecture includes an MoE block; the default remains the
+    current MoE model so the existing workflow keeps its original semantics.
     """
     architecture = str(config.get("architecture", "current_moe"))
     try:

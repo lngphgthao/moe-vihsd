@@ -30,6 +30,7 @@ model:
   architecture: current_moe
   pretrained_model_name: vinai/phobert-base
   freeze_backbone: false
+  pooling: mean
   model_dim: 128
   expert_hidden_dim: 512
   num_attention_heads: 4

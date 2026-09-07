@@ -9,4 +9,7 @@ model:
   architecture: current_moe
 ```
 
-Use `current_moe` for the baseline architecture or `stronger_moe` for the stronger variant in [models/moe_v2.py](models/moe_v2.py).
+Use `current_moe` for the baseline, `stronger_moe` for the stronger variant, or
+`pretrained_backbone` for PhoBERT contextual features followed by an MoE block.
+All registered architectures include MoE; the last option does not represent a
+standalone PhoBERT classifier.
