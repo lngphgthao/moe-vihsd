@@ -1,10 +1,46 @@
-# ViHSD Mixture of Experts experiment
+# ViHSD Mixture of Experts Experiment
 
-This project supports a consistent experiment workflow for multiple model variants while keeping the original MoE baseline as the default. The current training and evaluation pipeline is built around a shared config, a run-id directory, and saved metadata so each architecture is easy to compare later.
+This project trains and evaluates several Mixture of Experts (MoE) architectures for ViHSD. All experiments use the same configuration-driven workflow, run IDs, checkpoints, and saved metrics so model variants can be compared consistently.
 
-## Architecture workflow
+## Choose a workflow
 
-The repo now supports multiple model architectures through a single model factory in [models/factory.py](models/factory.py).
+| Workflow       | Start here                                                                    |
+| -------------- | ----------------------------------------------------------------------------- |
+| Google Colab   | Open [main.ipynb](main.ipynb) and follow the setup cells.                     |
+| Local terminal | Install dependencies, authenticate Hugging Face, then run the commands below. |
+
+### Local setup
+
+```bash
+pip install -r requirements.txt
+hf auth login
+python train.py --config configs/vihsd.yaml --smoke-test --run-id smoke-check
+python evaluate.py --config configs/vihsd.yaml --run-id smoke-check
+```
+
+Use the smoke test to verify the environment and dataset access. For a full experiment, replace `--smoke-test` with `--no-smoke-test`.
+
+### Colab setup
+
+Open [main.ipynb](main.ipynb) in Google Colab. The notebook:
+
+1. mounts Google Drive
+2. clones the repository and installs dependencies
+3. authenticates Hugging Face and W&B using Colab Secrets
+4. runs training and evaluation commands manually
+
+Before running the authentication cell, add these secrets in Colab's Secrets panel:
+
+| Secret          | Used for                              |
+| --------------- | ------------------------------------- |
+| `HF_TOKEN`      | Hugging Face dataset and model access |
+| `WANDB_API_KEY` | Weights & Biases logging              |
+
+The credentials are read at runtime and are not stored in the notebook, YAML files, or repository.
+
+## Model architectures
+
+The architectures are selected through the shared model factory in [models/factory.py](models/factory.py).
 
 Available architecture names:
 
@@ -12,7 +48,7 @@ Available architecture names:
 - `stronger_moe` — a stronger multi-expert variant in [models/moe_v2.py](models/moe_v2.py)
 - `pretrained_backbone` — PhoBERT contextual encoder followed by the MoE block in [models/pretrained_backbone.py](models/pretrained_backbone.py)
 
-You can switch architectures through the config or by `--set` overrides without editing the code path used by training and evaluation.
+Select an architecture in the YAML file or override it for one run. No code changes are required.
 
 Example:
 
@@ -29,15 +65,52 @@ model:
   architecture: current_moe
 ```
 
-## Colab
+## Run an experiment
 
-Open `main.ipynb` in Google Colab. The notebook mounts Drive, installs `requirements.txt`, runs `train.py`, and runs `evaluate.py`.
+Training and evaluation are separate commands. Always use a unique `--run-id` for a new experiment.
 
-The notebook prepares the Colab runtime and provides editable shell-command examples for training and evaluation. Run each command manually, using a unique `--run-id` and repeatable `--set` overrides instead of editing and pushing `configs/vihsd.yaml`. Each checkpoint folder stores the exact `resolved_config.yaml`, and evaluation automatically uses it.
+### Train
 
-## Manual experiment commands
+```bash
+python train.py \
+  --config configs/vihsd.yaml \
+  --no-smoke-test \
+  --run-id baseline-current-moe
+```
 
-Run `train.py` and `evaluate.py` manually from the notebook command cells or a terminal. Use `--set section.key=value` for temporary YAML overrides; the YAML file is never modified. Use a unique `--run-id` for each experiment. The notebook contains complete argument documentation and examples.
+### Evaluate
+
+```bash
+python evaluate.py \
+  --config configs/vihsd.yaml \
+  --run-id baseline-current-moe
+```
+
+Evaluation reloads the best checkpoint for that run. To evaluate a checkpoint directly:
+
+```bash
+python evaluate.py \
+  --config configs/vihsd.yaml \
+  --checkpoint checkpoints/<run-id>/vihsd_moe_best.safetensors
+```
+
+### Override settings for one run
+
+Use repeated `--set section.key=value` options. The YAML file is not modified, and only existing keys can be overridden.
+
+```bash
+python train.py \
+  --config configs/vihsd.yaml \
+  --no-smoke-test \
+  --run-id stronger-moe-v1 \
+  --set model.architecture=stronger_moe \
+  --set model.num_experts=8 \
+  --set model.top_k=2 \
+  --set training.learning_rate=0.0001 \
+  --set training.loss_type=focal
+```
+
+Values are parsed as YAML. Use `true`, `false`, `null`, numbers, quoted strings, or YAML lists as needed.
 
 ### What to tune first
 
@@ -49,23 +122,7 @@ Run `train.py` and `evaluate.py` manually from the notebook command cells or a t
 | 4        | `training.weight_decay`, `model.dropout`                                      | Regularization tuning is helpful when validation performance starts to diverge from training performance.       |
 | 5        | `model.expert_hidden_dim`, `model.num_attention_heads`, `training.batch_size` | Secondary capacity and optimization controls.                                                                   |
 
-`seed` affects repeatability, not the expected average score; use several seeds when comparing final candidates. `max_train_samples` and `smoke_test` are for fast debugging rather than final experiments. `num_workers`, output paths, and W&B settings do not change model quality. `routing.capacity_factor` is currently not used by the code, so changing it has no effect.
-
-## Local commands
-
-```bash
-pip install -r requirements.txt
-python train.py --config configs/vihsd.yaml
-python evaluate.py --config configs/vihsd.yaml
-```
-
-To override values for one run without changing the file, repeat `--set` with a dotted YAML key:
-
-```bash
-python train.py --config configs/vihsd.yaml --set model.architecture=stronger_moe --set training.epochs=10 --set training.learning_rate=0.0001 --set model.num_experts=8
-```
-
-Values are parsed as YAML, so use `true`, `false`, `null`, numbers, quoted strings, or YAML lists as appropriate. Only existing keys can be overridden; this catches misspellings before training begins.
+## Outputs and run IDs
 
 Each training run receives a unique Hanoi-time (`UTC+07:00`) timestamp and profile identifier, for example:
 
@@ -74,9 +131,18 @@ Each training run receives a unique Hanoi-time (`UTC+07:00`) timestamp and profi
 20260822T214420+0700-smoke
 ```
 
-Checkpoints and results are stored in matching run folders. The latest run is recorded in `checkpoints/latest_run.json` and `results/latest_run.json`, so evaluation without extra options uses the newest run.
+Checkpoints and results are stored in matching run folders. The latest run is recorded in `checkpoints/latest_run.json` and `results/latest_run.json`, so evaluation without `--run-id` uses the newest run.
 
-Each completed training run writes `results/<run-id>/run_metrics.json`. It records train and validation loss, accuracy, Macro F1, Weighted F1, and per-class F1 from the best-validation epoch (selected by validation Macro F1), plus test metrics after that best checkpoint is reloaded. `training_history.json` retains the train and validation loss, accuracy, and F1 metrics for every epoch. `hyperparameters.json` records the resolved experiment settings both as a nested object and as `flat_hyperparameters` with dotted keys, so runs are easy to diff or compare programmatically. It excludes paths and authentication settings. Use test metrics to report a final model, not to choose hyperparameters.
+Important files in `results/<run-id>/`:
+
+| File                     | Contents                                 |
+| ------------------------ | ---------------------------------------- |
+| `run_metrics.json`       | Best-validation and final test metrics   |
+| `training_history.json`  | Metrics for every training epoch         |
+| `hyperparameters.json`   | Resolved settings, including dotted keys |
+| `vihsd_predictions.json` | Saved test predictions, when generated   |
+
+`run_metrics.json` includes loss, accuracy, Macro F1, Weighted F1, and per-class F1. The best checkpoint is selected by validation Macro F1. Use test metrics only for reporting the final model, not for choosing hyperparameters.
 
 To evaluate an older run, pass its identifier:
 
@@ -84,51 +150,28 @@ To evaluate an older run, pass its identifier:
 python evaluate.py --config configs/vihsd.yaml --run-id 20260822T143015Z-full
 ```
 
-You can also provide a direct checkpoint path with `--checkpoint`.
+The YAML defaults to full training. Use `--smoke-test` for the short profile and `--no-smoke-test` to explicitly force the full profile. The smoke profile uses `training.smoke.epochs` and `training.smoke.max_train_samples`; the full profile uses the top-level `training.epochs` and `training.max_train_samples` values.
 
-The YAML defaults to full training. Run a quick smoke test without editing the YAML:
+## Storage and authentication
 
-```bash
-python train.py --config configs/vihsd.yaml --smoke-test
-```
+The default checkpoint path is the local `checkpoints` folder. In Colab, the notebook sets `CHECKPOINT_DIR` and `RESULTS_DIR` to Google Drive folders so outputs persist after the runtime ends.
 
-To explicitly force the full profile, use:
+In Colab, authenticate through the built-in **Secrets** interface. Add `HF_TOKEN` and `WANDB_API_KEY`, then run the notebook setup cell. Credentials are read at runtime and are not stored in the notebook, YAML files, or repository. No `.env` file is used.
 
-```bash
-python train.py --config configs/vihsd.yaml --no-smoke-test
-```
-
-The smoke profile is defined under `training.smoke` in the YAML. The normal profile uses the top-level `training.epochs` and `training.max_train_samples` values.
-
-The default checkpoint path is the local `checkpoints` folder. In Colab, set `CHECKPOINT_DIR` to a Google Drive folder so the same scripts persist runs outside the temporary runtime. `RESULTS_DIR` can override the results location in the same way.
-
-Hugging Face authentication is loaded from the local `.env` file using the `HF_TOKEN` variable. Keep `.env` private and create it with:
-
-```text
-HF_TOKEN=your_hugging_face_token
-```
-
-Tokenization uses the configured `dataset.tokenization_num_proc` workers and Hugging Face's cache. Set it to `1` if multiprocessing is unavailable in your environment. Data loading defaults to `training.num_workers: 0`, which avoids PyTorch worker-cleanup errors in Colab/Jupyter; for a script-only local run, you can increase it with `--set training.num_workers=2`. Already-tokenized data is reused from cache on later runs.
-
-Set `logging.use_wandb: true` in the YAML to enable logging. In Colab, create a Google Secret named `WANDB_API_KEY`; the notebook loads it into the runtime and verifies the W&B login before training. Keep this key out of the notebook, YAML, and Git repository. For local runs, authenticate once with `wandb login --verify`.
-
-## Multi-variant comparison workflow
-
-To keep experiments comparable, follow the same order for every run:
-
-1. choose one architecture (`current_moe`, `stronger_moe`, or `pretrained_backbone`)
-2. set a unique `--run-id`
-3. save the resolved config automatically in the checkpoint folder
-4. evaluate with the same `evaluate.py` command
-5. compare the `run_metrics.json` files side by side
-
-Examples:
+For local runs:
 
 ```bash
-python train.py --config configs/vihsd.yaml --set model.architecture=current_moe --run-id comparison-baseline
-python train.py --config configs/vihsd.yaml --set model.architecture=stronger_moe --run-id comparison-stronger
-python evaluate.py --config configs/vihsd.yaml --run-id comparison-baseline
-python evaluate.py --config configs/vihsd.yaml --run-id comparison-stronger
+hf auth login
+wandb login --verify
 ```
 
-This preserves a single workflow for all variants and makes rollback or side-by-side comparison easy.
+## Runtime notes
+
+- Set `logging.use_wandb: true` in the YAML to enable W&B logging.
+- Tokenization uses `dataset.tokenization_num_proc` workers and the Hugging Face cache. Set it to `1` if multiprocessing is unavailable.
+- Data loading defaults to `training.num_workers: 0`, which is safest in Colab/Jupyter. For a script-only local run, you can increase it with `--set training.num_workers=2`.
+- Already-tokenized data is reused from cache on later runs.
+- `seed` affects repeatability, not expected average performance; use several seeds for final comparisons.
+- `max_train_samples` and `smoke_test` are for fast debugging, not final experiments.
+- `num_workers`, output paths, and W&B settings do not change model quality.
+- `routing.capacity_factor` is currently unused by the code, so changing it has no effect.
