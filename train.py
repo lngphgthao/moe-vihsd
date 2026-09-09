@@ -135,7 +135,7 @@ def compute_task_loss(logits, labels, config):
     return base_loss
 
 
-def maybe_start_wandb(config):
+def maybe_start_wandb(config, run_id):
     logging_config = config["logging"]
     if not logging_config.get("use_wandb", False):
         return None
@@ -143,7 +143,7 @@ def maybe_start_wandb(config):
         import wandb
     except ImportError as error:
         raise RuntimeError("Install wandb or set logging.use_wandb to false") from error
-    return wandb.init(project=logging_config["project"], name=logging_config.get("run_name"), config=config)
+    return wandb.init(project=logging_config["project"], name=run_id, config=config)
 
 
 def apply_training_profile(config, smoke_test_override):
@@ -283,7 +283,7 @@ def main() -> None:
         json.dumps(create_hyperparameters_log(config, run_id, smoke_test), indent=2, sort_keys=True),
         encoding="utf-8",
     )
-    wandb_run = maybe_start_wandb(config)
+    wandb_run = maybe_start_wandb(config, run_id)
     print(f"Training profile: {'smoke test' if smoke_test else 'full run'}")
     print(f"Run ID: {run_id}")
     best_macro_f1 = -1.0
