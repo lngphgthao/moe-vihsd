@@ -4,11 +4,11 @@ This project trains and evaluates several Mixture of Experts (MoE) architectures
 
 ## Choose a workflow
 
-| Workflow       | Start here                                                                    |
-| -------------- | ----------------------------------------------------------------------------- |
+| Workflow       | Start here                                                                        |
+| -------------- | --------------------------------------------------------------------------------- |
 | Kaggle         | Open [main_kaggle.ipynb](main_kaggle.ipynb) in Kaggle and follow the setup cells. |
-| Google Colab   | Open [main.ipynb](main.ipynb) in Colab and follow the setup cells.            |
-| Local terminal | Install dependencies, authenticate Hugging Face, then run the commands below. |
+| Google Colab   | Open [main.ipynb](main.ipynb) in Colab and follow the setup cells.                |
+| Local terminal | Install dependencies, authenticate Hugging Face, then run the commands below.     |
 
 ### Local setup
 
