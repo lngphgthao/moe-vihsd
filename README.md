@@ -6,7 +6,8 @@ This project trains and evaluates several Mixture of Experts (MoE) architectures
 
 | Workflow       | Start here                                                                    |
 | -------------- | ----------------------------------------------------------------------------- |
-| Google Colab   | Open [main.ipynb](main.ipynb) and follow the setup cells.                     |
+| Kaggle         | Open [main.ipynb](main.ipynb) in Kaggle and follow the setup cells.           |
+| Google Colab   | Open [main.ipynb](main.ipynb) in Colab and follow the setup cells.            |
 | Local terminal | Install dependencies, authenticate Hugging Face, then run the commands below. |
 
 ### Local setup
@@ -19,6 +20,19 @@ python evaluate.py --config configs/vihsd.yaml --run-id smoke-check
 ```
 
 Use the smoke test to verify the environment and dataset access. For a full experiment, replace `--smoke-test` with `--no-smoke-test`.
+
+### Kaggle setup
+
+Open or import [main.ipynb](main.ipynb) in a Kaggle Notebook:
+
+1. In the right-hand **Notebook settings** sidebar:
+   - **Accelerator**: select **GPU P100** or **GPU T4 x2**.
+   - **Internet**: toggle **Internet ON** (required for dataset download, model weights, and W&B).
+2. Under **Add-ons → Secrets**, add:
+   - `HF_TOKEN`: Hugging Face dataset and model access
+   - `WANDB_API_KEY`: Weights & Biases logging
+3. Run the setup cells in [main.ipynb](main.ipynb) to configure outputs in `/kaggle/working/checkpoints` and `/kaggle/working/results`.
+4. To persist checkpoints and results permanently, use **"Save Version" → "Save & Run All (Commit)"**. Output files will be accessible under the notebook's **Output** tab.
 
 ### Colab setup
 
@@ -176,16 +190,17 @@ The YAML defaults to full training. Use `--smoke-test` for the short profile and
 
 ## Storage and authentication
 
-The default checkpoint path is the local `checkpoints` folder. In Colab, the notebook sets `CHECKPOINT_DIR` and `RESULTS_DIR` to Google Drive folders so outputs persist after the runtime ends.
+The default checkpoint path is the local `checkpoints` folder.
 
-In Colab, authenticate through the built-in **Secrets** interface. Add `HF_TOKEN` and `WANDB_API_KEY`, then run the notebook setup cell. Credentials are read at runtime and are not stored in the notebook, YAML files, or repository. No `.env` file is used.
+- **Kaggle**: The notebook sets `CHECKPOINT_DIR` to `/kaggle/working/checkpoints` and `RESULTS_DIR` to `/kaggle/working/results`. Use **"Save Version" → "Save & Run All (Commit)"** so outputs persist in the notebook's **Output** tab. Authenticate by adding `HF_TOKEN` and `WANDB_API_KEY` under **Add-ons → Secrets**.
+- **Colab**: The notebook sets `CHECKPOINT_DIR` and `RESULTS_DIR` to Google Drive folders so outputs persist after the runtime ends. Authenticate via Colab's **Secrets** panel (`HF_TOKEN` and `WANDB_API_KEY`).
+- **Local terminal**:
+  ```bash
+  hf auth login
+  wandb login --verify
+  ```
 
-For local runs:
-
-```bash
-hf auth login
-wandb login --verify
-```
+Credentials are read at runtime and are not stored in the notebook, YAML files, or repository. No `.env` file is used.
 
 ## Runtime notes
 
