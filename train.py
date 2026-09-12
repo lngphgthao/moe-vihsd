@@ -181,6 +181,7 @@ def apply_training_profile(config, smoke_test_override):
         smoke_config = training_config.get("smoke", {})
         training_config["epochs"] = smoke_config.get("epochs", 1)
         training_config["max_train_samples"] = smoke_config.get("max_train_samples", 2000)
+        training_config["max_eval_samples"] = smoke_config.get("max_eval_samples", 500)
     return smoke_test
 
 
@@ -238,7 +239,7 @@ def create_hyperparameters_log(config, run_id, smoke_test):
         "model": config["model"],
         "routing": config["routing"],
     }
-    architecture = config.get("model", {}).get("architecture", "current_moe")
+    architecture = config.get("model", {}).get("architecture", "phobert_moe")
     return {
         "run_id": run_id,
         "profile": "smoke" if smoke_test else "full",
@@ -280,7 +281,7 @@ def main() -> None:
     data_config = {**config["dataset"], **config["training"]}
     bundle = prepare_data(data_config)
     model_config = {**config["model"], "pad_token_id": bundle.tokenizer.pad_token_id or 0}
-    model_config.setdefault("architecture", "current_moe")
+    model_config.setdefault("architecture", "phobert_moe")
     model = build_model(model_config, bundle.tokenizer.vocab_size, bundle.num_labels).to(device)
     print("MoE architecture:")
     print(f"  variant: {model_config['architecture']}")
@@ -293,7 +294,13 @@ def main() -> None:
     if model_config["architecture"] == "pretrained_backbone":
         print(f"  pretrained_model_name: {model_config.get('pretrained_model_name')}")
         print(f"  freeze_backbone: {model_config.get('freeze_backbone')}")
-    optimizer = torch.optim.AdamW(model.parameters(), lr=float(config["training"]["learning_rate"]), weight_decay=float(config["training"]["weight_decay"]))
+    elif model_config["architecture"] == "phobert_moe":
+        print(f"  pretrained_model_name: {model_config.get('pretrained_model_name')}")
+        print(f"  moe_layers: {model_config.get('moe_layers', [8, 9, 10, 11])}")
+        print(f"  freeze_attention: {model_config.get('freeze_attention', False)}")
+        print(f"  upcycle: {model_config.get('upcycle', True)}")
+    trainable_params = [p for p in model.parameters() if p.requires_grad]
+    optimizer = torch.optim.AdamW(trainable_params, lr=float(config["training"]["learning_rate"]), weight_decay=float(config["training"]["weight_decay"]))
     balance_factor = float(config["routing"]["load_balance_loss_factor"])
     checkpoint_root = resolve_output_path(config["paths"]["checkpoint_dir"], "CHECKPOINT_DIR")
     checkpoint_dir = checkpoint_root / run_id

@@ -14,7 +14,7 @@ training:
   smoke_test: false
   epochs: 5
   batch_size: 16
-  learning_rate: 0.0002
+  learning_rate: 0.00003
   weight_decay: 0.01
   loss_type: cross_entropy
   focal_gamma: 2.0
@@ -27,17 +27,24 @@ training:
   smoke:
     epochs: 1
     max_train_samples: 2000
+    max_eval_samples: 500
 model:
-  architecture: current_moe
+  architecture: phobert_moe
   pretrained_model_name: vinai/phobert-base
+  # phoBERT MoE settings:
+  moe_layers: [8, 9, 10, 11] # layers with FFN replaced by token-level MoE
+  num_experts: 4
+  top_k: 1
+  upcycle: true # clone pretrained PhoBERT FFN weights into all experts
+  freeze_attention: false # false = full fine-tuning (default); true = parameter-efficient
+  freeze_embeddings: false
+  pooling: cls # cls or mean
+  # Fallback settings for current_moe / stronger_moe:
   freeze_backbone: false
-  pooling: mean
   model_dim: 128
   expert_hidden_dim: 512
   num_attention_heads: 4
   num_layers: 2
-  num_experts: 4
-  top_k: 1
   dropout: 0.1
 routing:
   load_balance_loss_factor: 0.01

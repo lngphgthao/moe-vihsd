@@ -6,12 +6,14 @@ from typing import Any
 
 from models.moe import ViHSDMoEClassifier
 from models.moe_v2 import StrongerViHSDMoEClassifier
+from models.phobert_moe import PhoBERTMoEClassifier
 from models.pretrained_backbone import PretrainedBackboneClassifier
 
 MODEL_REGISTRY: dict[str, Any] = {
     "current_moe": ViHSDMoEClassifier,
     "stronger_moe": StrongerViHSDMoEClassifier,
     "pretrained_backbone": PretrainedBackboneClassifier,
+    "phobert_moe": PhoBERTMoEClassifier,
 }
 
 
@@ -41,7 +43,7 @@ def build_model(config: dict, vocab_size: int, num_labels: int):
     Every registered architecture includes an MoE block; the default remains the
     current MoE model so the existing workflow keeps its original semantics.
     """
-    architecture = str(config.get("architecture", "current_moe"))
+    architecture = str(config.get("architecture", "phobert_moe"))
     try:
         model_cls = MODEL_REGISTRY[architecture]
     except KeyError as exc:

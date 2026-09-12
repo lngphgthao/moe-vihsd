@@ -6,10 +6,9 @@ The config includes a `model.architecture` field so the same workflow can run mu
 
 ```yaml
 model:
-  architecture: current_moe
+  architecture: phobert_moe
 ```
 
-Use `current_moe` for the baseline, `stronger_moe` for the stronger variant, or
-`pretrained_backbone` for PhoBERT contextual features followed by an MoE block.
-All registered architectures include MoE; the last option does not represent a
-standalone PhoBERT classifier.
+Use `phobert_moe` (default) for the true token-level MoE Transformer with PhoBERT,
+`current_moe` for the scratch baseline, `stronger_moe` for the stronger multi-expert
+scratch variant, or `pretrained_backbone` for PhoBERT followed by a sentence-level MoE head.

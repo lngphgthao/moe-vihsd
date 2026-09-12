@@ -58,25 +58,32 @@ The architectures are selected through the shared model factory in [models/facto
 
 Available architecture names:
 
-- `current_moe` — the original baseline implementation
+- `phobert_moe` — true token-level MoE Transformer: replaces PhoBERT's internal FFNs with Sparse MoE layers, with MoE upcycling and configurable layer selection in [models/phobert_moe.py](models/phobert_moe.py)
+- `current_moe` — the original baseline implementation (scratch 2-layer Transformer with sentence-level MoE head)
 - `stronger_moe` — a stronger multi-expert variant in [models/moe_v2.py](models/moe_v2.py)
-- `pretrained_backbone` — PhoBERT contextual encoder followed by the MoE block in [models/pretrained_backbone.py](models/pretrained_backbone.py)
+- `pretrained_backbone` — PhoBERT contextual encoder followed by a sentence-level MoE head in [models/pretrained_backbone.py](models/pretrained_backbone.py)
 
 Select an architecture in the YAML file or override it for one run. No code changes are required.
 
 Example:
 
 ```bash
+# True MoE Transformer (Full fine-tuning, default):
+python train.py --config configs/vihsd.yaml --set model.architecture=phobert_moe --run-id phobert-moe-full
+
+# True MoE Transformer (Parameter-efficient / frozen attention):
+python train.py --config configs/vihsd.yaml --set model.architecture=phobert_moe --set model.freeze_attention=true --run-id phobert-moe-peft
+
+# Scratch baselines:
 python train.py --config configs/vihsd.yaml --set model.architecture=current_moe --run-id baseline-current-moe
 python train.py --config configs/vihsd.yaml --set model.architecture=stronger_moe --run-id variant-stronger-moe
-python train.py --config configs/vihsd.yaml --set model.architecture=pretrained_backbone --run-id phobert-moe
 ```
 
 The YAML default is:
 
 ```yaml
 model:
-  architecture: current_moe
+  architecture: phobert_moe
 ```
 
 ## Run an experiment

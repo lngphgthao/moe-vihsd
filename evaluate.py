@@ -52,7 +52,7 @@ def main() -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     bundle = prepare_data({**config["dataset"], **config["training"]})
     model_config = {**config["model"], "pad_token_id": bundle.tokenizer.pad_token_id or 0}
-    model_config.setdefault("architecture", "current_moe")
+    model_config.setdefault("architecture", "phobert_moe")
     model = build_model(model_config, bundle.tokenizer.vocab_size, bundle.num_labels).to(device)
     model.load_state_dict(load_file(str(checkpoint_path), device=str(device)))
     model.eval()

@@ -84,6 +84,11 @@ def prepare_data(config: dict) -> DatasetBundle:
     if limit:
         train_name = config["train_split"]
         tokenized[train_name] = tokenized[train_name].select(range(min(limit, len(tokenized[train_name]))))
+    eval_limit = config.get("max_eval_samples")
+    if eval_limit:
+        for split_name in [config["validation_split"], config["test_split"]]:
+            if split_name in tokenized:
+                tokenized[split_name] = tokenized[split_name].select(range(min(eval_limit, len(tokenized[split_name]))))
 
     loaders = {
         "train": DataLoader(tokenized[config["train_split"]], batch_size=config["batch_size"], shuffle=True, num_workers=config["num_workers"]),
