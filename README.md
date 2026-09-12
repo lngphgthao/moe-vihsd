@@ -110,6 +110,28 @@ python train.py \
   --set training.loss_type=focal
 ```
 
+Supported task losses are `cross_entropy`, `weighted_cross_entropy`, and `focal`.
+For class-weighted CE, provide one weight per class, for example:
+
+```bash
+python train.py \
+  --config configs/vihsd.yaml \
+  --set training.loss_type=weighted_cross_entropy \
+  --set 'training.class_weights=[1.0,1.5,2.0]' \
+  --run-id weighted-ce
+```
+
+Focal loss uses `training.focal_gamma` (default `2.0`) and optionally applies the
+same `training.class_weights` as its class-balancing factor:
+
+```bash
+python train.py \
+  --config configs/vihsd.yaml \
+  --set training.loss_type=focal \
+  --set training.focal_gamma=2.0 \
+  --run-id focal
+```
+
 Values are parsed as YAML. Use `true`, `false`, `null`, numbers, quoted strings, or YAML lists as needed.
 
 ### What to tune first

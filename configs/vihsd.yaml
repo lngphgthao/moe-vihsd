@@ -18,6 +18,7 @@ training:
   weight_decay: 0.01
   loss_type: cross_entropy
   focal_gamma: 2.0
+  # Set one weight per label when using weighted_cross_entropy or weighted focal loss.
   class_weights: null
   # Keep this at 0 for notebook/Colab compatibility. Override it on a script-only
   # local run (for example, --set training.num_workers=2) if needed.
