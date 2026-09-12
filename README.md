@@ -6,7 +6,7 @@ This project trains and evaluates several Mixture of Experts (MoE) architectures
 
 | Workflow       | Start here                                                                    |
 | -------------- | ----------------------------------------------------------------------------- |
-| Kaggle         | Open [main.ipynb](main.ipynb) in Kaggle and follow the setup cells.           |
+| Kaggle         | Open [main_kaggle.ipynb](main_kaggle.ipynb) in Kaggle and follow the setup cells. |
 | Google Colab   | Open [main.ipynb](main.ipynb) in Colab and follow the setup cells.            |
 | Local terminal | Install dependencies, authenticate Hugging Face, then run the commands below. |
 
@@ -23,7 +23,7 @@ Use the smoke test to verify the environment and dataset access. For a full expe
 
 ### Kaggle setup
 
-Open or import [main.ipynb](main.ipynb) in a Kaggle Notebook:
+Open or import [main_kaggle.ipynb](main_kaggle.ipynb) in a Kaggle Notebook:
 
 1. In the right-hand **Notebook settings** sidebar:
    - **Accelerator**: select **GPU P100** or **GPU T4 x2**.
@@ -31,7 +31,7 @@ Open or import [main.ipynb](main.ipynb) in a Kaggle Notebook:
 2. Under **Add-ons → Secrets**, add:
    - `HF_TOKEN`: Hugging Face dataset and model access
    - `WANDB_API_KEY`: Weights & Biases logging
-3. Run the setup cells in [main.ipynb](main.ipynb) to configure outputs in `/kaggle/working/checkpoints` and `/kaggle/working/results`.
+3. Run the setup cells in [main_kaggle.ipynb](main_kaggle.ipynb) to configure outputs in `/kaggle/working/checkpoints` and `/kaggle/working/results`.
 4. To persist checkpoints and results permanently, use **"Save Version" → "Save & Run All (Commit)"**. Output files will be accessible under the notebook's **Output** tab.
 
 ### Colab setup
