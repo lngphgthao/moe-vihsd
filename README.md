@@ -58,7 +58,7 @@ The architectures are selected through the shared model factory in [models/facto
 
 Available architecture names:
 
-- `phobert_moe` — true token-level MoE Transformer: replaces PhoBERT's internal FFNs with Sparse MoE layers, with MoE upcycling and configurable layer selection in [models/phobert_moe.py](models/phobert_moe.py)
+- `phobert_moe` — true token-level MoE Transformer: loads the full pretrained PhoBERT encoder, preserves its embeddings and self-attention, and replaces the selected internal FFNs with Sparse MoE layers. The default converts layers 8-11 (zero-based), with MoE upcycling and configurable layer selection in [models/phobert_moe.py](models/phobert_moe.py)
 - `current_moe` — the original baseline implementation (scratch 2-layer Transformer with sentence-level MoE head)
 - `stronger_moe` — a stronger multi-expert variant in [models/moe_v2.py](models/moe_v2.py)
 - `pretrained_backbone` — PhoBERT contextual encoder followed by a sentence-level MoE head in [models/pretrained_backbone.py](models/pretrained_backbone.py)

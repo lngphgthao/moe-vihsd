@@ -12,3 +12,18 @@ model:
 Use `phobert_moe` (default) for the true token-level MoE Transformer with PhoBERT,
 `current_moe` for the scratch baseline, `stronger_moe` for the stronger multi-expert
 scratch variant, or `pretrained_backbone` for PhoBERT followed by a sentence-level MoE head.
+
+With the default settings, `phobert_moe` loads the full pretrained
+`vinai/phobert-base` encoder (12 layers, hidden size 768, 12 attention heads),
+keeps its embeddings and self-attention, and replaces the feed-forward network in
+layers 8-11 (zero-based) with a token-level Sparse MoE block. Each replaced layer
+has four 768 -> 3072 -> 768 experts, top-1 routing, the original PhoBERT FFN
+weights copied into every expert, and the original residual dropout and LayerNorm.
+The other eight encoder layers remain standard PhoBERT layers. Therefore, the
+flowchart's attention, router, experts, weighted combination, and residual path
+describe each converted layer; they do not describe the entire encoder as one
+attention-plus-MoE block.
+
+This is different from `pretrained_backbone`, which runs the complete PhoBERT
+encoder unchanged, pools its sequence output to one sentence vector, and sends
+that single vector through one sentence-level MoE head.
