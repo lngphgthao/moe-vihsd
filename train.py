@@ -46,7 +46,7 @@ def evaluate(model, loader, device, label_names=None):
             input_ids = batch["input_ids"].to(device)
             attention_mask = batch["attention_mask"].to(device)
             labels = batch["labels"].to(device)
-            logits, _ = model(input_ids, attention_mask)
+            logits, _ = standardize_model_output(model(input_ids, attention_mask))
             total_loss += F.cross_entropy(logits, labels, reduction="sum").item()
             total_examples += labels.numel()
             preds = logits.argmax(dim=-1).cpu().tolist()

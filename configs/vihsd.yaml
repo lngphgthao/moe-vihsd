@@ -39,7 +39,6 @@ model:
   freeze_attention: false # false = full fine-tuning (default); true = parameter-efficient
   freeze_embeddings: false
   pooling: cls # cls or mean
-  # Fallback settings for current_moe / stronger_moe:
   freeze_backbone: false
   model_dim: 128
   expert_hidden_dim: 512
