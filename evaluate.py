@@ -1,4 +1,4 @@
-"""Evaluate a saved ViHSD MoE checkpoint and write JSON predictions."""
+"""Evaluate a saved ViHSD checkpoint and write JSON predictions."""
 
 from __future__ import annotations
 
@@ -61,7 +61,7 @@ def main() -> None:
     all_labels = []
     total_loss = 0.0
     total_examples = 0
-    routing_counts = torch.zeros(model.num_experts, dtype=torch.long)
+    routing_counts = torch.zeros(getattr(model, "num_experts", 0), dtype=torch.long)
     with torch.no_grad():
         for batch in tqdm(bundle.loaders["test"], desc="Evaluating"):
             input_ids = batch["input_ids"].to(device)
@@ -71,7 +71,7 @@ def main() -> None:
             predicted = logits.argmax(dim=-1)
             total_loss += F.cross_entropy(logits, labels, reduction="sum").item()
             total_examples += labels.numel()
-            if "top_indices" in aux:
+            if "top_indices" in aux and routing_counts.numel() > 0:
                 routing_counts += torch.bincount(aux["top_indices"].reshape(-1).cpu(), minlength=model.num_experts)
             preds_cpu = predicted.cpu().tolist()
             labels_cpu = labels.cpu().tolist()

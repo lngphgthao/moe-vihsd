@@ -283,18 +283,12 @@ def main() -> None:
     model_config = {**config["model"], "pad_token_id": bundle.tokenizer.pad_token_id or 0}
     model_config.setdefault("architecture", "phobert_moe")
     model = build_model(model_config, bundle.tokenizer.vocab_size, bundle.num_labels).to(device)
-    print("MoE architecture:")
+    print("Model architecture:")
     print(f"  variant: {model_config['architecture']}")
-    print(f"  model_dim: {model_config.get('model_dim')}")
-    print(f"  expert_hidden_dim: {model_config.get('expert_hidden_dim')}")
-    print(f"  num_experts: {model_config.get('num_experts')}")
-    print(f"  top_k: {model_config.get('top_k')}")
-    print(f"  num_layers: {model_config.get('num_layers')}")
-    print(f"  dropout: {model_config.get('dropout')}")
-    if model_config["architecture"] == "pretrained_backbone":
+    if model_config["architecture"] in {"pretrained_backbone", "dense_phobert"}:
         print(f"  pretrained_model_name: {model_config.get('pretrained_model_name')}")
         print(f"  freeze_backbone: {model_config.get('freeze_backbone')}")
-    elif model_config["architecture"] == "phobert_moe":
+    if model_config["architecture"] == "phobert_moe":
         print(f"  pretrained_model_name: {model_config.get('pretrained_model_name')}")
         print(f"  moe_layers: {model_config.get('moe_layers', [8, 9, 10, 11])}")
         print(f"  freeze_attention: {model_config.get('freeze_attention', False)}")

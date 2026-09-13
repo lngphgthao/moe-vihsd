@@ -8,12 +8,14 @@ from models.moe import ViHSDMoEClassifier
 from models.moe_v2 import StrongerViHSDMoEClassifier
 from models.phobert_moe import PhoBERTMoEClassifier
 from models.pretrained_backbone import PretrainedBackboneClassifier
+from models.dense_phobert import DensePhoBERTClassifier
 
 MODEL_REGISTRY: dict[str, Any] = {
     "current_moe": ViHSDMoEClassifier,
     "stronger_moe": StrongerViHSDMoEClassifier,
     "pretrained_backbone": PretrainedBackboneClassifier,
     "phobert_moe": PhoBERTMoEClassifier,
+    "dense_phobert": DensePhoBERTClassifier,
 }
 
 
@@ -40,8 +42,7 @@ def standardize_model_output(model_output):
 def build_model(config: dict, vocab_size: int, num_labels: int):
     """Instantiate a model from a config-driven architecture name.
 
-    Every registered architecture includes an MoE block; the default remains the
-    current MoE model so the existing workflow keeps its original semantics.
+    The registry includes both MoE variants and dense baselines.
     """
     architecture = str(config.get("architecture", "phobert_moe"))
     try:
