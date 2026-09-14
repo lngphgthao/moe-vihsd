@@ -99,6 +99,15 @@ python train.py \
   --run-id baseline-current-moe
 ```
 
+The original dense PhoBERT baseline has its own independent training script:
+
+```bash
+python train_dense_phobert.py --config configs/vihsd.yaml --run-id dense-phobert
+```
+
+This script uses mean pooling and a single classifier, and does not use the MoE
+model factory or the MoE training options.
+
 ### Evaluate
 
 ```bash

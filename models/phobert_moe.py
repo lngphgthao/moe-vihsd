@@ -98,7 +98,7 @@ class PhoBERTMoELayer(nn.Module):
         output_attentions: bool = False,
         *args: Any,
         **kwargs: Any,
-    ) -> tuple[torch.Tensor, ...]:
+    ) -> torch.Tensor:
         # 1. Self-attention sub-layer (preserves HuggingFace RobertaAttention contract)
         attn_kwargs = dict(kwargs)
         if head_mask is not None:
@@ -115,7 +115,6 @@ class PhoBERTMoELayer(nn.Module):
         filtered_kwargs = {k: v for k, v in attn_kwargs.items() if k in self._attn_params}
         attention_outputs = self.attention(hidden_states, attention_mask, **filtered_kwargs)
         attention_output = attention_outputs[0]
-        extra_outputs = attention_outputs[1:]
 
         # 2. Token-level MoE Feed-Forward Network
         batch_size, seq_len, hidden_size = attention_output.shape
@@ -166,8 +165,8 @@ class PhoBERTMoELayer(nn.Module):
             "probabilities": probabilities,
         }
 
-        # RobertaEncoder expects every layer to return a tuple and reads the first element as the next layer's hidden states.
-        return (layer_output, *extra_outputs)
+        # Recent Transformers versions pass each layer output directly to the next layer.
+        return layer_output
 
 
 class PhoBERTClassificationHead(nn.Module):
