@@ -67,6 +67,7 @@ def evaluate(model, loader, device, label_names=None):
 def train_epoch(model, loader, optimizer, device, balance_factor, epoch, total_epochs, config, label_names=None):
     model.train()
     total_loss = 0.0
+    total_auxiliary_loss = 0.0
     total_correct = 0
     total_examples = 0
     all_preds = []
@@ -91,6 +92,7 @@ def train_epoch(model, loader, optimizer, device, balance_factor, epoch, total_e
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()
         total_loss += loss.item() * labels.size(0)
+        total_auxiliary_loss += float(balance_loss) * labels.size(0)
         preds = logits.argmax(dim=-1).cpu().tolist()
         labs = labels.cpu().tolist()
         all_preds.extend(preds)
@@ -102,6 +104,7 @@ def train_epoch(model, loader, optimizer, device, balance_factor, epoch, total_e
     avg_loss = (total_loss / total_examples) if total_examples > 0 else 0.0
     return {
         "loss": avg_loss,
+        "auxiliary_loss": (total_auxiliary_loss / total_examples) if total_examples > 0 else 0.0,
         "accuracy": cls_metrics["accuracy"],
         "macro_f1": cls_metrics["macro_f1"],
         "weighted_f1": cls_metrics["weighted_f1"],
@@ -333,6 +336,7 @@ def main() -> None:
         record = {
             "epoch": epoch + 1,
             "train_loss": train_metrics["loss"],
+            "train_auxiliary_loss": train_metrics["auxiliary_loss"],
             "train_accuracy": train_metrics["accuracy"],
             "train_macro_f1": train_metrics["macro_f1"],
             "train_weighted_f1": train_metrics["weighted_f1"],
