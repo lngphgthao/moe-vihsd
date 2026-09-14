@@ -36,6 +36,11 @@ model:
   num_experts: 4
   top_k: 1
   upcycle: true # clone pretrained PhoBERT FFN weights into all experts
+  expert_type: gelu # gelu, geglu, or swiglu; gated experts require upcycle=false
+  expert_hidden_size: null # null = PhoBERT intermediate size; use 2048 for gated experts
+  expert_init_noise: 0.0 # e.g. 0.001 to break identical upcycled expert initialization
+  learnable_residual_scale: false # experiment 4: learn the MoE residual contribution
+  residual_scale_init: 1.0 # use 0.1 for a conservative MoE residual start
   freeze_attention: false # false = full fine-tuning (default); true = parameter-efficient
   freeze_embeddings: false
   pooling: cls # cls or mean

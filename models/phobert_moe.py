@@ -24,6 +24,11 @@ class PhoBERTMoELayer(nn.Module):
         top_k: int = 1,
         dropout: float = 0.1,
         upcycle: bool = True,
+        expert_type: str = "gelu",
+        expert_hidden_size: int | None = None,
+        expert_init_noise: float = 0.0,
+        learnable_residual_scale: bool = False,
+        residual_scale_init: float = 1.0,
     ) -> None:
         super().__init__()
         # Preserve original self-attention module
@@ -31,29 +36,49 @@ class PhoBERTMoELayer(nn.Module):
 
         hidden_size = original_layer.intermediate.dense.in_features
         intermediate_size = original_layer.intermediate.dense.out_features
+        expert_hidden_size = expert_hidden_size or intermediate_size
+        if upcycle and expert_type != "gelu":
+            raise ValueError("upcycle=true is only supported with expert_type='gelu'")
+        if expert_init_noise < 0:
+            raise ValueError("expert_init_noise must be non-negative")
 
         self.num_experts = num_experts
         self.top_k = top_k
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
+        self.expert_type = expert_type
+        self.expert_hidden_size = expert_hidden_size
 
         self.router = TopKRouter(hidden_size, num_experts, top_k)
         self.experts = nn.ModuleList(
-            [Expert(hidden_size, intermediate_size, dropout) for _ in range(num_experts)]
+            [Expert(hidden_size, expert_hidden_size, dropout, expert_type) for _ in range(num_experts)]
         )
 
         if upcycle:
             # MoE Upcycling: clone pretrained intermediate and output projection weights to all experts
+            for expert in self.experts:
+                expert.upcycle_from_ffn(
+                    original_layer.intermediate.dense,
+                    original_layer.output.dense,
+                )
+
+        if expert_init_noise > 0:
             with torch.no_grad():
                 for expert in self.experts:
-                    expert.network[0].weight.copy_(original_layer.intermediate.dense.weight)
-                    expert.network[0].bias.copy_(original_layer.intermediate.dense.bias)
-                    expert.network[3].weight.copy_(original_layer.output.dense.weight)
-                    expert.network[3].bias.copy_(original_layer.output.dense.bias)
+                    for parameter in expert.parameters():
+                        if parameter.dim() > 1:
+                            parameter.add_(expert_init_noise * torch.randn_like(parameter))
 
         # Preserve original output dropout and LayerNorm
         self.dropout = nn.Dropout(float(dropout))
         self.LayerNorm = copy.deepcopy(original_layer.output.LayerNorm)
+        if learnable_residual_scale:
+            self.moe_residual_scale = nn.Parameter(torch.tensor(float(residual_scale_init)))
+        else:
+            self.register_buffer(
+                "moe_residual_scale",
+                torch.tensor(float(residual_scale_init)),
+            )
 
         # Cache parameter names accepted by attention.forward for cross-version compatibility
         import inspect
@@ -111,7 +136,9 @@ class PhoBERTMoELayer(nn.Module):
         moe_output = moe_output.reshape(batch_size, seq_len, hidden_size)
 
         # Residual connection + Dropout + LayerNorm
-        layer_output = self.LayerNorm(self.dropout(moe_output) + attention_output)
+        layer_output = self.LayerNorm(
+            self.moe_residual_scale * self.dropout(moe_output) + attention_output
+        )
 
         # 3. Compute load-balancing loss with padding mask awareness
         valid_mask = None
@@ -174,6 +201,13 @@ class PhoBERTMoEClassifier(nn.Module):
         self.top_k = top_k
         dropout = float(config.get("dropout", 0.1))
         upcycle = bool(config.get("upcycle", True))
+        expert_type = str(config.get("expert_type", "gelu")).lower()
+        expert_hidden_size = config.get("expert_hidden_size")
+        if expert_hidden_size is not None:
+            expert_hidden_size = int(expert_hidden_size)
+        expert_init_noise = float(config.get("expert_init_noise", 0.0))
+        learnable_residual_scale = bool(config.get("learnable_residual_scale", False))
+        residual_scale_init = float(config.get("residual_scale_init", 1.0))
         self.pooling = str(config.get("pooling", "cls")).lower()
         if self.pooling not in {"cls", "mean"}:
             raise ValueError("pooling must be either 'cls' or 'mean'")
@@ -208,6 +242,11 @@ class PhoBERTMoEClassifier(nn.Module):
                 top_k=top_k,
                 dropout=dropout,
                 upcycle=upcycle,
+                expert_type=expert_type,
+                expert_hidden_size=expert_hidden_size,
+                expert_init_noise=expert_init_noise,
+                learnable_residual_scale=learnable_residual_scale,
+                residual_scale_init=residual_scale_init,
             )
             self.roberta.encoder.layer[idx] = moe_layer
             self.moe_layers[str(idx)] = moe_layer

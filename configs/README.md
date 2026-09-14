@@ -24,6 +24,22 @@ flowchart's attention, router, experts, weighted combination, and residual path
 describe each converted layer; they do not describe the entire encoder as one
 attention-plus-MoE block.
 
+The architecture experiments are configurable without changing the model code:
+
+```yaml
+model:
+  learnable_residual_scale: true
+  residual_scale_init: 0.1
+  expert_init_noise: 0.001
+```
+
+Set `expert_type` to `geglu` or `swiglu` for a gated expert and use an
+`expert_hidden_size` of 2048 for a roughly parameter-matched comparison. Gated
+experts should be run with `upcycle: false`, because the original two-projection
+PhoBERT FFN cannot be copied directly into a three-projection gated expert.
+The default `expert_type: gelu`, `expert_init_noise: 0.0`, fixed residual scale,
+and `upcycle: true` preserve the original experiment.
+
 This is different from `pretrained_backbone`, which runs the complete PhoBERT
 encoder unchanged, pools its sequence output to one sentence vector, and sends
 that single vector through one sentence-level MoE head.
