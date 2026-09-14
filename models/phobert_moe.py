@@ -166,7 +166,8 @@ class PhoBERTMoELayer(nn.Module):
             "probabilities": probabilities,
         }
 
-        return layer_output
+        # RobertaEncoder expects every layer to return a tuple and reads the first element as the next layer's hidden states.
+        return (layer_output, *extra_outputs)
 
 
 class PhoBERTClassificationHead(nn.Module):
