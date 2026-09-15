@@ -22,17 +22,18 @@ import yaml
 from safetensors.torch import load_file, save_file
 from tqdm.auto import tqdm
 
-from data.vihsd import prepare_data
-from metrics import compute_classification_metrics
 from models.factory import build_model, standardize_model_output
-
-
-def set_seed(seed: int) -> None:
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(seed)
+from src.dataset import prepare_data
+from src.losses import compute_task_loss
+from src.metrics import compute_classification_metrics
+from src.utils import (
+    apply_overrides,
+    create_run_id,
+    flatten_hyperparameters,
+    load_config,
+    resolve_output_path,
+    set_seed,
+)
 
 
 def evaluate(model, loader, device, label_names=None):
@@ -112,58 +113,6 @@ def train_epoch(model, loader, optimizer, device, balance_factor, epoch, total_e
     }
 
 
-def compute_task_loss(logits, labels, config):
-    """Compute the configured classification loss for a batch."""
-    training_config = config.get("training", {})
-    loss_type = str(training_config.get("loss_type", "cross_entropy")).lower()
-    class_weights = training_config.get("class_weights")
-    aliases = {
-        "ce": "cross_entropy",
-        "weighted_ce": "weighted_cross_entropy",
-        "class_weighted_ce": "weighted_cross_entropy",
-    }
-    loss_type = aliases.get(loss_type, loss_type)
-
-    valid_loss_types = {"cross_entropy", "weighted_cross_entropy", "focal"}
-    if loss_type not in valid_loss_types:
-        raise ValueError(
-            f"Unsupported training.loss_type={loss_type!r}; "
-            f"choose one of {sorted(valid_loss_types)}."
-        )
-
-    weight_tensor = None
-    if class_weights is not None:
-        if len(class_weights) != logits.size(-1):
-            raise ValueError(
-                "training.class_weights must contain one weight per class "
-                f"({logits.size(-1)} expected, got {len(class_weights)})."
-            )
-        weight_tensor = torch.as_tensor(
-            class_weights,
-            dtype=logits.dtype,
-            device=logits.device,
-        )
-
-    if loss_type == "weighted_cross_entropy" and weight_tensor is None:
-        raise ValueError(
-            "training.class_weights is required when "
-            "training.loss_type is 'weighted_cross_entropy'."
-        )
-
-    if loss_type in {"cross_entropy", "weighted_cross_entropy"}:
-        return F.cross_entropy(logits, labels, weight=weight_tensor)
-
-    gamma = float(training_config.get("focal_gamma", 2.0))
-    if gamma < 0:
-        raise ValueError("training.focal_gamma must be non-negative.")
-    per_example_loss = F.cross_entropy(logits, labels, reduction="none")
-    target_probs = logits.softmax(dim=-1).gather(1, labels.unsqueeze(1)).squeeze(1)
-    focal_factor = (1.0 - target_probs).clamp_min(0.0).pow(gamma)
-    if weight_tensor is not None:
-        per_example_loss = per_example_loss * weight_tensor[labels]
-    return (focal_factor * per_example_loss).mean()
-
-
 def maybe_start_wandb(config, run_id):
     logging_config = config["logging"]
     if not logging_config.get("use_wandb", False):
@@ -188,51 +137,6 @@ def apply_training_profile(config, smoke_test_override):
     return smoke_test
 
 
-def apply_overrides(config, overrides):
-    """Apply ``section.key=value`` overrides parsed as YAML scalars."""
-    for override in overrides:
-        if "=" not in override:
-            raise ValueError(f"Invalid --set value {override!r}; expected section.key=value.")
-        key_path, raw_value = override.split("=", 1)
-        keys = key_path.split(".")
-        if not key_path or any(not key for key in keys):
-            raise ValueError(f"Invalid configuration key {key_path!r}.")
-        target = config
-        for key in keys[:-1]:
-            if key not in target or not isinstance(target[key], dict):
-                raise KeyError(f"Unknown configuration section {key_path!r}.")
-            target = target[key]
-        if keys[-1] not in target:
-            raise KeyError(f"Unknown configuration key {key_path!r}.")
-        target[keys[-1]] = yaml.safe_load(raw_value)
-    return config
-
-
-def create_run_id(smoke_test, requested_run_id=None):
-    if requested_run_id:
-        return requested_run_id
-    hanoi_timezone = timezone(timedelta(hours=7), name="Asia/Ho_Chi_Minh")
-    timestamp = datetime.now(hanoi_timezone).strftime("%Y%m%dT%H%M%S")
-    profile = "smoke" if smoke_test else "full"
-    return f"{timestamp}-{profile}"
-
-
-def resolve_output_path(configured_path, environment_name):
-    return Path(os.getenv(environment_name, configured_path)).expanduser()
-
-
-def flatten_hyperparameters(values, prefix=""):
-    """Return nested configuration values as stable dotted keys for comparison."""
-    flattened = {}
-    for key, value in values.items():
-        full_key = f"{prefix}.{key}" if prefix else key
-        if isinstance(value, dict):
-            flattened.update(flatten_hyperparameters(value, full_key))
-        else:
-            flattened[full_key] = value
-    return flattened
-
-
 def create_hyperparameters_log(config, run_id, smoke_test):
     """Keep only experiment-defining settings, excluding paths and credentials."""
     hyperparameters = {
@@ -250,6 +154,36 @@ def create_hyperparameters_log(config, run_id, smoke_test):
         "hyperparameters": hyperparameters,
         "flat_hyperparameters": flatten_hyperparameters(hyperparameters),
     }
+
+
+def collect_routing_diagnostics(model) -> dict:
+    """Extract routing entropy and expert load fractions from the last forward pass."""
+    diagnostics = {}
+    moe_layers = getattr(model, "moe_layers", {})
+    if not moe_layers:
+        inner = getattr(model, "module", model)
+        moe_layers = getattr(inner, "moe_layers", {})
+    for layer_idx_str, moe_layer in moe_layers.items():
+        info = getattr(moe_layer, "last_routing_info", {})
+        if not info:
+            continue
+        probs = info.get("probabilities")
+        indices = info.get("top_indices")
+        if probs is None or indices is None:
+            continue
+        if probs.shape[-1] == 0:
+            continue
+        log_probs = torch.log(probs.clamp(min=1e-9))
+        entropy = -(probs * log_probs).sum(dim=-1).mean().item()
+        num_experts = probs.shape[-1]
+        flat_indices = indices.reshape(-1)
+        counts = torch.bincount(flat_indices, minlength=num_experts).float()
+        fractions = (counts / counts.sum().clamp_min(1.0)).tolist()
+        diagnostics[f"layer_{layer_idx_str}"] = {
+            "routing_entropy": entropy,
+            "expert_load_fractions": fractions,
+        }
+    return diagnostics
 
 
 def main() -> None:
@@ -275,7 +209,7 @@ def main() -> None:
         help="Optional identifier for this run. Defaults to UTC timestamp plus profile.",
     )
     args = parser.parse_args()
-    config = yaml.safe_load(Path(args.config).read_text(encoding="utf-8"))
+    config = load_config(args.config)
     apply_overrides(config, args.overrides)
     smoke_test = apply_training_profile(config, args.smoke_test)
     run_id = create_run_id(smoke_test, args.run_id)
@@ -380,9 +314,20 @@ def main() -> None:
     best_checkpoint_path = checkpoint_dir / checkpoint_filename
     model.load_state_dict(load_file(str(best_checkpoint_path), device=str(device)))
     test_metrics = evaluate(model, bundle.loaders["test"], device, label_names=bundle.label_names)
+    routing_diagnostics = {}
+    if hasattr(model, "moe_layers") or hasattr(getattr(model, "module", model), "moe_layers"):
+        model.eval()
+        with torch.no_grad():
+            for batch in bundle.loaders["validation"]:
+                input_ids = batch["input_ids"].to(device)
+                attention_mask = batch["attention_mask"].to(device)
+                standardize_model_output(model(input_ids, attention_mask))
+                break
+        routing_diagnostics = collect_routing_diagnostics(model)
     run_metrics = {
         "run_id": run_id,
         "best_epoch": best_record["epoch"],
+        "routing_diagnostics": routing_diagnostics,
         "train": {
             "loss": best_record["train_loss"],
             "accuracy": best_record["train_accuracy"],

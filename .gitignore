@@ -54,3 +54,7 @@ logs/
 *.tmp
 *.temp
 *.bak
+
+# Local agent planning and session documentation
+/AGENTS.md
+/docs/

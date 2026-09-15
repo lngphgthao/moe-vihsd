@@ -1,0 +1,17 @@
+# Stage A: Standard PhoBERT-MoE control (4 experts, top-1, layers 8-11, GELU, upcycle)
+base_config: ../vihsd.yaml
+
+model:
+  architecture: phobert_moe
+  moe_layers: [8, 9, 10, 11]
+  num_experts: 4
+  top_k: 1
+  expert_type: gelu
+  upcycle: true
+  shared_expert: false
+
+training:
+  loss_type: cross_entropy
+
+routing:
+  load_balance_loss_factor: 0.01

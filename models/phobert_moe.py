@@ -29,6 +29,7 @@ class PhoBERTMoELayer(nn.Module):
         expert_init_noise: float = 0.0,
         learnable_residual_scale: bool = False,
         residual_scale_init: float = 1.0,
+        use_shared_expert: bool = False,
     ) -> None:
         super().__init__()
         # Preserve original self-attention module
@@ -42,32 +43,46 @@ class PhoBERTMoELayer(nn.Module):
         if expert_init_noise < 0:
             raise ValueError("expert_init_noise must be non-negative")
 
-        self.num_experts = num_experts
+        self.num_experts = int(num_experts)
         self.top_k = top_k
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.expert_type = expert_type
         self.expert_hidden_size = expert_hidden_size
+        self.use_shared_expert = bool(use_shared_expert)
 
-        self.router = TopKRouter(hidden_size, num_experts, top_k)
-        self.experts = nn.ModuleList(
-            [Expert(hidden_size, expert_hidden_size, dropout, expert_type) for _ in range(num_experts)]
-        )
+        self.router = None
+        self.experts = nn.ModuleList()
+        if self.num_experts > 0:
+            self.router = TopKRouter(hidden_size, self.num_experts, top_k)
+            self.experts = nn.ModuleList(
+                [Expert(hidden_size, expert_hidden_size, dropout, expert_type) for _ in range(self.num_experts)]
+            )
 
-        if upcycle:
-            # MoE Upcycling: clone pretrained intermediate and output projection weights to all experts
-            for expert in self.experts:
-                expert.upcycle_from_ffn(
+            if upcycle:
+                # MoE Upcycling: clone pretrained intermediate and output projection weights to all experts
+                for expert in self.experts:
+                    expert.upcycle_from_ffn(
+                        original_layer.intermediate.dense,
+                        original_layer.output.dense,
+                    )
+
+            if expert_init_noise > 0:
+                with torch.no_grad():
+                    for expert in self.experts:
+                        for parameter in expert.parameters():
+                            if parameter.dim() > 1:
+                                parameter.add_(expert_init_noise * torch.randn_like(parameter))
+
+        if self.use_shared_expert:
+            self.shared_expert = Expert(hidden_size, expert_hidden_size, dropout, "gelu")
+            if upcycle:
+                self.shared_expert.upcycle_from_ffn(
                     original_layer.intermediate.dense,
                     original_layer.output.dense,
                 )
-
-        if expert_init_noise > 0:
-            with torch.no_grad():
-                for expert in self.experts:
-                    for parameter in expert.parameters():
-                        if parameter.dim() > 1:
-                            parameter.add_(expert_init_noise * torch.randn_like(parameter))
+        else:
+            self.shared_expert = None
 
         # Preserve original output dropout and LayerNorm
         self.dropout = nn.Dropout(float(dropout))
@@ -120,17 +135,27 @@ class PhoBERTMoELayer(nn.Module):
         batch_size, seq_len, hidden_size = attention_output.shape
         flat_tokens = attention_output.reshape(-1, hidden_size)
 
-        weights, indices, probabilities = self.router(flat_tokens)
-        moe_output = torch.zeros_like(flat_tokens)
+        if self.num_experts > 0:
+            weights, indices, probabilities = self.router(flat_tokens)
+            moe_output = torch.zeros_like(flat_tokens)
 
-        for expert_id, expert in enumerate(self.experts):
-            selected = indices == expert_id
-            if not selected.any():
-                continue
-            token_positions, choice_positions = selected.nonzero(as_tuple=True)
-            expert_out = expert(flat_tokens[token_positions])
-            expert_weight = weights[token_positions, choice_positions].unsqueeze(-1)
-            moe_output.index_add_(0, token_positions, expert_out * expert_weight)
+            for expert_id, expert in enumerate(self.experts):
+                selected = indices == expert_id
+                if not selected.any():
+                    continue
+                token_positions, choice_positions = selected.nonzero(as_tuple=True)
+                expert_out = expert(flat_tokens[token_positions])
+                expert_weight = weights[token_positions, choice_positions].unsqueeze(-1)
+                moe_output.index_add_(0, token_positions, expert_out * expert_weight)
+        else:
+            moe_output = torch.zeros_like(flat_tokens)
+            weights = None
+            indices = None
+            probabilities = torch.zeros((flat_tokens.shape[0], 0), device=flat_tokens.device, dtype=flat_tokens.dtype)
+
+        if self.use_shared_expert:
+            shared_out = self.shared_expert(flat_tokens)
+            moe_output = moe_output + shared_out
 
         moe_output = moe_output.reshape(batch_size, seq_len, hidden_size)
 
@@ -152,12 +177,15 @@ class PhoBERTMoELayer(nn.Module):
             if valid_mask is not None and valid_mask.numel() != flat_tokens.shape[0]:
                 valid_mask = None
 
-        if valid_mask is not None and valid_mask.any():
-            valid_probs = probabilities[valid_mask]
-            valid_indices = indices[valid_mask]
-            balance_loss = self.router.load_balance_loss(valid_probs, valid_indices)
+        if self.router is not None:
+            if valid_mask is not None and valid_mask.any():
+                valid_probs = probabilities[valid_mask]
+                valid_indices = indices[valid_mask]
+                balance_loss = self.router.load_balance_loss(valid_probs, valid_indices)
+            else:
+                balance_loss = self.router.load_balance_loss(probabilities, indices)
         else:
-            balance_loss = self.router.load_balance_loss(probabilities, indices)
+            balance_loss = torch.tensor(0.0, device=flat_tokens.device, dtype=flat_tokens.dtype)
 
         self.last_routing_info = {
             "balance_loss": balance_loss,
@@ -201,6 +229,7 @@ class PhoBERTMoEClassifier(nn.Module):
         self.top_k = top_k
         dropout = float(config.get("dropout", 0.1))
         upcycle = bool(config.get("upcycle", True))
+        use_shared_expert = bool(config.get("shared_expert", False))
         expert_type = str(config.get("expert_type", "gelu")).lower()
         expert_hidden_size = config.get("expert_hidden_size")
         if expert_hidden_size is not None:
@@ -247,6 +276,7 @@ class PhoBERTMoEClassifier(nn.Module):
                 expert_init_noise=expert_init_noise,
                 learnable_residual_scale=learnable_residual_scale,
                 residual_scale_init=residual_scale_init,
+                use_shared_expert=use_shared_expert,
             )
             self.roberta.encoder.layer[idx] = moe_layer
             self.moe_layers[str(idx)] = moe_layer

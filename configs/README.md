@@ -43,3 +43,20 @@ and `upcycle: true` preserve the original experiment.
 This is different from `pretrained_backbone`, which runs the complete PhoBERT
 encoder unchanged, pools its sequence output to one sentence vector, and sends
 that single vector through one sentence-level MoE head.
+
+## Experiment Overlays
+
+Preset experiment configurations are provided in `configs/experiments/`:
+- `stage_a_dense.yaml`: Dense PhoBERT baseline (mean pooling, cross-entropy)
+- `stage_a_moe.yaml`: Standard PhoBERT-MoE control (4 experts, top-1, layers 8-11, GELU, upcycle)
+- `stage_b_shared_expert.yaml`: Shared-plus-routed experts (always-active shared expert + routed experts)
+- `stage_d_geglu.yaml`: GEGLU gated experts
+- `stage_d_swiglu.yaml`: SwiGLU gated experts
+
+Each overlay specifies `base_config: ../vihsd.yaml` to inherit default hyperparameters and paths. Run them directly without lengthy CLI overrides:
+
+```bash
+python train.py --config configs/experiments/stage_a_dense.yaml --run-id dense-s42 --set seed=42
+python train.py --config configs/experiments/stage_d_geglu.yaml --run-id geglu-s42 --set seed=42
+```
+

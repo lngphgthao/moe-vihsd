@@ -1,0 +1,12 @@
+# Stage A: Dense PhoBERT baseline (mean pooling, cross-entropy)
+base_config: ../vihsd.yaml
+
+model:
+  architecture: dense_phobert
+  pooling: mean
+
+training:
+  loss_type: cross_entropy
+
+routing:
+  load_balance_loss_factor: 0.0

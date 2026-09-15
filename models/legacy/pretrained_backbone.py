@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 from transformers import AutoModel
 
-from models.moe import SparseMoE
+from models.legacy.moe import SparseMoE
 
 
 class PretrainedBackboneClassifier(nn.Module):

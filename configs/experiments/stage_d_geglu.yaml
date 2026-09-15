@@ -1,0 +1,18 @@
+# Stage D: GEGLU experts (gated GELU, upcycle=false, hidden_size=2048)
+base_config: ../vihsd.yaml
+
+model:
+  architecture: phobert_moe
+  moe_layers: [8, 9, 10, 11]
+  num_experts: 4
+  top_k: 1
+  expert_type: geglu
+  upcycle: false
+  expert_hidden_size: 2048
+  shared_expert: false
+
+training:
+  loss_type: cross_entropy
+
+routing:
+  load_balance_loss_factor: 0.01

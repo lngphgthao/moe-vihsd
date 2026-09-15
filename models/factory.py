@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from models.phobert_moe import PhoBERTMoEClassifier
-from models.pretrained_backbone import PretrainedBackboneClassifier
+from models.legacy.pretrained_backbone import PretrainedBackboneClassifier
 from models.dense_phobert import DensePhoBERTClassifier
 
 MODEL_REGISTRY: dict[str, Any] = {

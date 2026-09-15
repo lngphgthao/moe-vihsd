@@ -74,4 +74,3 @@ def format_classification_report(
         digits=digits,
         zero_division=0,
     )
-

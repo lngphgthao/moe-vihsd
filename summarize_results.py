@@ -50,6 +50,10 @@ def parse_run(run_dir: Path) -> dict[str, Any] | None:
     f1_offensive = per_class.get("1", 0.0) * 100
     f1_hate = per_class.get("2", 0.0) * 100
 
+    routing = metrics.get("routing_diagnostics", {})
+    entropies = [v["routing_entropy"] for v in routing.values() if isinstance(v, dict) and "routing_entropy" in v]
+    avg_entropy = sum(entropies) / len(entropies) if entropies else None
+
     return {
         "run_id": run_dir.name,
         "profile": profile,
@@ -58,6 +62,7 @@ def parse_run(run_dir: Path) -> dict[str, Any] | None:
         "top_k": top_k,
         "loss_type": loss_type,
         "epoch": best_epoch,
+        "routing_entropy": avg_entropy,
         "macro_f1": macro_f1,
         "weighted_f1": weighted_f1,
         "accuracy": acc,
@@ -75,6 +80,7 @@ def format_markdown_table(rows: list[dict[str, Any]]) -> str:
         "Top-k",
         "Loss",
         "Epoch",
+        "Routing Entropy",
         "Macro F1",
         "Weighted F1",
         "Accuracy",
@@ -87,6 +93,8 @@ def format_markdown_table(rows: list[dict[str, Any]]) -> str:
         "| " + " | ".join(["---"] * len(headers)) + " |",
     ]
     for r in rows:
+        entropy_val = r.get("routing_entropy")
+        entropy_text = "n/a" if entropy_val is None else f"{entropy_val:.3f}"
         line = (
             f"| `{r['run_id']}` "
             f"| `{r['architecture']}` "
@@ -94,6 +102,7 @@ def format_markdown_table(rows: list[dict[str, Any]]) -> str:
             f"| {r['top_k']} "
             f"| {r['loss_type']} "
             f"| {r['epoch']} "
+            f"| {entropy_text} "
             f"| **{r['macro_f1']:.2f}%** "
             f"| {r['weighted_f1']:.2f}% "
             f"| {r['accuracy']:.2f}% "

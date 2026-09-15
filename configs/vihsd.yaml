@@ -36,6 +36,7 @@ model:
   num_experts: 4
   top_k: 1
   upcycle: true # clone pretrained PhoBERT FFN weights into all experts
+  shared_expert: false   # true = always-active shared expert (Stage B experiments)
   expert_type: gelu # gelu, geglu, or swiglu; gated experts require upcycle=false
   expert_hidden_size: null # null = PhoBERT intermediate size; use 2048 for gated experts
   expert_init_noise: 0.0 # e.g. 0.001 to break identical upcycled expert initialization
@@ -50,7 +51,6 @@ model:
   dropout: 0.1
 routing:
   load_balance_loss_factor: 0.01
-  capacity_factor: 1.25
 paths:
   checkpoint_dir: checkpoints
   results_dir: results

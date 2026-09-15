@@ -6,8 +6,8 @@ This project trains and evaluates PhoBERT and Mixture of Experts (MoE) architect
 
 | Workflow       | Start here                                                                        |
 | -------------- | --------------------------------------------------------------------------------- |
-| Kaggle         | Open [main_kaggle.ipynb](main_kaggle.ipynb) in Kaggle and follow the setup cells. |
-| Google Colab   | Open [main.ipynb](main.ipynb) in Colab and follow the setup cells.                |
+| Kaggle         | Open [main_kaggle.ipynb](notebooks/main_kaggle.ipynb) in Kaggle and follow the setup cells. |
+| Google Colab   | Open [main_colab.ipynb](notebooks/main_colab.ipynb) in Colab and follow the setup cells.    |
 | Local terminal | Install dependencies, authenticate Hugging Face, then run the commands below.     |
 
 ### Local setup
@@ -23,7 +23,7 @@ Use the smoke test to verify the environment and dataset access. For a full expe
 
 ### Kaggle setup
 
-Open or import [main_kaggle.ipynb](main_kaggle.ipynb) in a Kaggle Notebook:
+Open or import [main_kaggle.ipynb](notebooks/main_kaggle.ipynb) in a Kaggle Notebook:
 
 1. In the right-hand **Notebook settings** sidebar:
    - **Accelerator**: select **GPU P100** or **GPU T4 x2**.
@@ -31,12 +31,12 @@ Open or import [main_kaggle.ipynb](main_kaggle.ipynb) in a Kaggle Notebook:
 2. Under **Add-ons → Secrets**, add:
    - `HF_TOKEN`: Hugging Face dataset and model access
    - `WANDB_API_KEY`: Weights & Biases logging
-3. Run the setup cells in [main_kaggle.ipynb](main_kaggle.ipynb) to configure outputs in `/kaggle/working/checkpoints` and `/kaggle/working/results`.
+3. Run the setup cells in [main_kaggle.ipynb](notebooks/main_kaggle.ipynb) to configure outputs in `/kaggle/working/checkpoints` and `/kaggle/working/results`.
 4. To persist checkpoints and results permanently, use **"Save Version" → "Save & Run All (Commit)"**. Output files will be accessible under the notebook's **Output** tab.
 
 ### Colab setup
 
-Open [main.ipynb](main.ipynb) in Google Colab. The notebook:
+Open [main_colab.ipynb](notebooks/main_colab.ipynb) in Google Colab. The notebook:
 
 1. mounts Google Drive
 2. clones the repository and installs dependencies
@@ -59,7 +59,7 @@ The architectures are selected through the shared model factory in [models/facto
 Available architecture names:
 
 - `phobert_moe` — true token-level MoE Transformer: loads the full pretrained PhoBERT encoder, preserves its embeddings and self-attention, and replaces the selected internal FFNs with Sparse MoE layers. The default converts layers 8-11 (zero-based), with MoE upcycling and configurable layer selection in [models/phobert_moe.py](models/phobert_moe.py)
-- `pretrained_backbone` — PhoBERT contextual encoder followed by a sentence-level MoE head in [models/pretrained_backbone.py](models/pretrained_backbone.py)
+- `pretrained_backbone` — PhoBERT contextual encoder followed by a sentence-level MoE head in [models/legacy/pretrained_backbone.py](models/legacy/pretrained_backbone.py)
 
 Select an architecture in the YAML file or override it for one run. No code changes are required.
 
@@ -251,4 +251,4 @@ Credentials are read at runtime and are not stored in the notebook, YAML files, 
 - `seed` affects repeatability, not expected average performance; use several seeds for final comparisons.
 - `max_train_samples` and `smoke_test` are for fast debugging, not final experiments.
 - `num_workers`, output paths, and W&B settings do not change model quality.
-- `routing.capacity_factor` is currently unused by the code, so changing it has no effect.
+- `routing.load_balance_loss_factor` controls the weight of the auxiliary balance loss added to the task loss during training. Set it to `0.0` to disable balancing entirely.

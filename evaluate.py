@@ -19,31 +19,10 @@ import yaml
 from safetensors.torch import load_file
 from tqdm.auto import tqdm
 
-from data.vihsd import prepare_data
-from metrics import compute_classification_metrics, format_classification_report
 from models.factory import build_model, standardize_model_output
-
-
-def resolve_output_path(configured_path, environment_name):
-    return Path(os.getenv(environment_name, configured_path)).expanduser()
-
-
-def find_run_checkpoint(run_dir: Path, architecture: str) -> Path:
-    """Find a checkpoint while supporting both new and legacy run folders."""
-    candidates = [
-        run_dir / f"{architecture}_best.safetensors",
-        run_dir / "vihsd_moe_best.safetensors",
-    ]
-    for candidate in candidates:
-        if candidate.exists():
-            return candidate
-    discovered = sorted(run_dir.glob("*_best.safetensors"))
-    if len(discovered) == 1:
-        return discovered[0]
-    if not discovered:
-        raise FileNotFoundError(f"No checkpoint found in run directory: {run_dir}")
-    names = ", ".join(path.name for path in discovered)
-    raise RuntimeError(f"Multiple checkpoints found in {run_dir}; choose one with --checkpoint: {names}")
+from src.dataset import prepare_data
+from src.metrics import compute_classification_metrics, format_classification_report
+from src.utils import find_run_checkpoint, load_config, resolve_output_path
 
 
 def main() -> None:
@@ -52,7 +31,7 @@ def main() -> None:
     parser.add_argument("--checkpoint", default=None)
     parser.add_argument("--run-id", default=None, help="Evaluate a specific run directory.")
     args = parser.parse_args()
-    config = yaml.safe_load(Path(args.config).read_text(encoding="utf-8"))
+    config = load_config(args.config)
     checkpoint_root = resolve_output_path(config["paths"]["checkpoint_dir"], "CHECKPOINT_DIR")
     if args.checkpoint:
         checkpoint_path = Path(args.checkpoint)
@@ -66,7 +45,7 @@ def main() -> None:
         checkpoint_path = Path(json.loads(latest_path.read_text(encoding="utf-8"))["checkpoint"])
     resolved_config_path = checkpoint_path.parent / "resolved_config.yaml"
     if resolved_config_path.exists():
-        config = yaml.safe_load(resolved_config_path.read_text(encoding="utf-8"))
+        config = load_config(resolved_config_path)
         print(f"Using run configuration: {resolved_config_path}")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     bundle = prepare_data({**config["dataset"], **config["training"]})
