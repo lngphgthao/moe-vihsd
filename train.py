@@ -286,6 +286,7 @@ def main() -> None:
     model_config = {**config["model"], "pad_token_id": bundle.tokenizer.pad_token_id or 0}
     model_config.setdefault("architecture", "phobert_moe")
     model = build_model(model_config, bundle.tokenizer.vocab_size, bundle.num_labels).to(device)
+    checkpoint_filename = f"{model_config['architecture']}_best.safetensors"
     print("Model architecture:")
     print(f"  variant: {model_config['architecture']}")
     if model_config["architecture"] in {"pretrained_backbone", "dense_phobert"}:
@@ -353,11 +354,17 @@ def main() -> None:
             best_macro_f1 = val_metrics["macro_f1"]
             save_file(
                 {name: tensor.detach().cpu().contiguous() for name, tensor in model.state_dict().items()},
-                str(checkpoint_dir / "vihsd_moe_best.safetensors"),
+                str(checkpoint_dir / checkpoint_filename),
             )
-            (checkpoint_dir / "vihsd_moe_metadata.json").write_text(
+            (checkpoint_dir / f"{model_config['architecture']}_metadata.json").write_text(
                 json.dumps(
-                    {"run_id": run_id, "label_names": bundle.label_names, "model_config": model_config},
+                    {
+                        "run_id": run_id,
+                        "architecture": model_config["architecture"],
+                        "checkpoint": checkpoint_filename,
+                        "label_names": bundle.label_names,
+                        "model_config": model_config,
+                    },
                     indent=2,
                 ),
                 encoding="utf-8",
@@ -370,7 +377,7 @@ def main() -> None:
     (results_dir / "training_history.json").write_text(json.dumps(history, indent=2), encoding="utf-8")
     if best_record is None:
         raise RuntimeError("Training produced no checkpoint; set training.epochs to at least 1.")
-    best_checkpoint_path = checkpoint_dir / "vihsd_moe_best.safetensors"
+    best_checkpoint_path = checkpoint_dir / checkpoint_filename
     model.load_state_dict(load_file(str(best_checkpoint_path), device=str(device)))
     test_metrics = evaluate(model, bundle.loaders["test"], device, label_names=bundle.label_names)
     run_metrics = {

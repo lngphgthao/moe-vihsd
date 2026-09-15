@@ -4,19 +4,33 @@ from __future__ import annotations
 
 from typing import Any
 
-from models.moe import ViHSDMoEClassifier
-from models.moe_v2 import StrongerViHSDMoEClassifier
 from models.phobert_moe import PhoBERTMoEClassifier
 from models.pretrained_backbone import PretrainedBackboneClassifier
 from models.dense_phobert import DensePhoBERTClassifier
 
 MODEL_REGISTRY: dict[str, Any] = {
-    "current_moe": ViHSDMoEClassifier,
-    "stronger_moe": StrongerViHSDMoEClassifier,
     "pretrained_backbone": PretrainedBackboneClassifier,
     "phobert_moe": PhoBERTMoEClassifier,
     "dense_phobert": DensePhoBERTClassifier,
 }
+
+
+def validate_model_config(config: dict) -> str:
+    """Validate architecture-specific settings before loading model weights."""
+    architecture = str(config.get("architecture", "phobert_moe"))
+    if architecture not in MODEL_REGISTRY:
+        supported = ", ".join(sorted(MODEL_REGISTRY))
+        raise ValueError(
+            f"Unknown model architecture '{architecture}'. Supported architectures: {supported}"
+        )
+    if architecture == "dense_phobert":
+        pooling = str(config.get("pooling", "mean")).lower()
+        if pooling != "mean":
+            raise ValueError(
+                "dense_phobert requires model.pooling=mean. "
+                "Pass --set model.pooling=mean when using the shared config."
+            )
+    return architecture
 
 
 def standardize_model_output(model_output):
@@ -42,9 +56,9 @@ def standardize_model_output(model_output):
 def build_model(config: dict, vocab_size: int, num_labels: int):
     """Instantiate a model from a config-driven architecture name.
 
-    The registry includes both MoE variants and dense baselines.
+    The registry includes the supported PhoBERT and dense architectures.
     """
-    architecture = str(config.get("architecture", "phobert_moe"))
+    architecture = validate_model_config(config)
     try:
         model_cls = MODEL_REGISTRY[architecture]
     except KeyError as exc:

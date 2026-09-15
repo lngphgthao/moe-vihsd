@@ -1,6 +1,6 @@
 # ViHSD Mixture of Experts Experiment
 
-This project trains and evaluates several Mixture of Experts (MoE) architectures for ViHSD. All experiments use the same configuration-driven workflow, run IDs, checkpoints, and saved metrics so model variants can be compared consistently.
+This project trains and evaluates PhoBERT and Mixture of Experts (MoE) architectures for ViHSD. All experiments use the same configuration-driven workflow, run IDs, checkpoints, and saved metrics so model variants can be compared consistently.
 
 ## Choose a workflow
 
@@ -59,8 +59,6 @@ The architectures are selected through the shared model factory in [models/facto
 Available architecture names:
 
 - `phobert_moe` — true token-level MoE Transformer: loads the full pretrained PhoBERT encoder, preserves its embeddings and self-attention, and replaces the selected internal FFNs with Sparse MoE layers. The default converts layers 8-11 (zero-based), with MoE upcycling and configurable layer selection in [models/phobert_moe.py](models/phobert_moe.py)
-- `current_moe` — the original baseline implementation (scratch 2-layer Transformer with sentence-level MoE head)
-- `stronger_moe` — a stronger multi-expert variant in [models/moe_v2.py](models/moe_v2.py)
 - `pretrained_backbone` — PhoBERT contextual encoder followed by a sentence-level MoE head in [models/pretrained_backbone.py](models/pretrained_backbone.py)
 
 Select an architecture in the YAML file or override it for one run. No code changes are required.
@@ -74,9 +72,8 @@ python train.py --config configs/vihsd.yaml --set model.architecture=phobert_moe
 # True MoE Transformer (Parameter-efficient / frozen attention):
 python train.py --config configs/vihsd.yaml --set model.architecture=phobert_moe --set model.freeze_attention=true --run-id phobert-moe-peft
 
-# Scratch baselines:
-python train.py --config configs/vihsd.yaml --set model.architecture=current_moe --run-id baseline-current-moe
-python train.py --config configs/vihsd.yaml --set model.architecture=stronger_moe --run-id variant-stronger-moe
+# Dense baseline:
+python train.py --config configs/vihsd.yaml --set model.architecture=dense_phobert --set model.pooling=mean --run-id dense-phobert-integrated
 ```
 
 The YAML default is:
@@ -96,24 +93,52 @@ Training and evaluation are separate commands. Always use a unique `--run-id` fo
 python train.py \
   --config configs/vihsd.yaml \
   --no-smoke-test \
-  --run-id baseline-current-moe
+  --run-id phobert-moe-integrated \
+  --set model.architecture=phobert_moe
 ```
 
-The original dense PhoBERT baseline has its own independent training script:
+For the dense PhoBERT baseline, use the integrated pipeline so the dataset,
+seed, optimizer, loss, validation selection, checkpoint format, and result
+schema are identical to the MoE runs:
 
 ```bash
-python train_dense_phobert.py --config configs/vihsd.yaml --run-id dense-phobert
+python train.py \
+  --config configs/vihsd.yaml \
+  --no-smoke-test \
+  --run-id dense-phobert-integrated \
+  --set model.architecture=dense_phobert \
+  --set model.pooling=mean \
+  --set training.loss_type=cross_entropy \
+  --set routing.load_balance_loss_factor=0.0
 ```
 
-This script uses mean pooling and a single classifier, and does not use the MoE
-model factory or the MoE training options.
+`model.pooling=mean` is required because the dense baseline defines mean
+pooling as its architecture. `routing.load_balance_loss_factor=0.0` is
+explicit documentation that the dense model has no routing loss; it does not
+change the result because the dense model returns no auxiliary loss.
+
+Each new run stores its checkpoint using the architecture name, for example
+`dense_phobert_best.safetensors` or `phobert_moe_best.safetensors`. Evaluation
+also accepts the older `vihsd_moe_best.safetensors` name, so existing runs are
+still usable. To debug a run, inspect these files in order:
+
+1. `checkpoints/<run-id>/resolved_config.yaml` for the exact configuration.
+2. `checkpoints/<run-id>/*_metadata.json` for the architecture and checkpoint.
+3. `results/<run-id>/hyperparameters.json` and `run_metrics.json` for settings and metrics.
+
+Evaluate either architecture with the same command:
+
+```bash
+python evaluate.py --config configs/vihsd.yaml --run-id dense-phobert-integrated
+python evaluate.py --config configs/vihsd.yaml --run-id phobert-moe-integrated
+```
 
 ### Evaluate
 
 ```bash
 python evaluate.py \
   --config configs/vihsd.yaml \
-  --run-id baseline-current-moe
+  --run-id phobert-moe-integrated
 ```
 
 Evaluation reloads the best checkpoint for that run. To evaluate a checkpoint directly:
@@ -121,7 +146,7 @@ Evaluation reloads the best checkpoint for that run. To evaluate a checkpoint di
 ```bash
 python evaluate.py \
   --config configs/vihsd.yaml \
-  --checkpoint checkpoints/<run-id>/vihsd_moe_best.safetensors
+  --checkpoint checkpoints/<run-id>/<architecture>_best.safetensors
 ```
 
 ### Override settings for one run
@@ -132,12 +157,11 @@ Use repeated `--set section.key=value` options. The YAML file is not modified, a
 python train.py \
   --config configs/vihsd.yaml \
   --no-smoke-test \
-  --run-id stronger-moe-v1 \
-  --set model.architecture=stronger_moe \
-  --set model.num_experts=8 \
-  --set model.top_k=2 \
-  --set training.learning_rate=0.0001 \
-  --set training.loss_type=focal
+  --run-id phobert-moe-experiment \
+  --set model.architecture=phobert_moe \
+  --set model.num_experts=4 \
+  --set model.top_k=1 \
+  --set training.loss_type=cross_entropy
 ```
 
 Supported task losses are `cross_entropy`, `weighted_cross_entropy`, and `focal`.
@@ -166,13 +190,13 @@ Values are parsed as YAML. Use `true`, `false`, `null`, numbers, quoted strings,
 
 ### What to tune first
 
-| Priority | Settings                                                                      | Compact guidance                                                                                                |
-| -------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| 1        | `training.learning_rate`, `training.epochs`, `training.loss_type`             | Start with conservative learning rates and use a stable task loss; focal loss is available for class imbalance. |
-| 2        | `model.architecture`, `model.num_experts`, `model.top_k`                      | Compare baseline MoE vs stronger MoE using the same workflow. Keep `1 <= top_k <= num_experts`.                 |
-| 3        | `model.model_dim`, `model.num_layers`, `dataset.max_length`                   | Increase capacity carefully; this raises training cost and memory use.                                          |
-| 4        | `training.weight_decay`, `model.dropout`                                      | Regularization tuning is helpful when validation performance starts to diverge from training performance.       |
-| 5        | `model.expert_hidden_dim`, `model.num_attention_heads`, `training.batch_size` | Secondary capacity and optimization controls.                                                                   |
+| Priority | Settings                                                           | Compact guidance                                                                                                |
+| -------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| 1        | `training.learning_rate`, `training.epochs`, `training.loss_type`  | Start with conservative learning rates and use a stable task loss; focal loss is available for class imbalance. |
+| 2        | `model.architecture`, `model.num_experts`, `model.top_k`           | Compare dense PhoBERT with PhoBERT MoE using the same workflow. Keep `1 <= top_k <= num_experts`.               |
+| 3        | `model.model_dim`, `model.expert_hidden_dim`, `dataset.max_length` | Increase capacity carefully; this raises capacity and memory use.                                               |
+| 4        | `training.weight_decay`, `model.dropout`                           | Regularization tuning is helpful when validation performance starts to diverge from training performance.       |
+| 5        | `model.expert_hidden_dim`, `training.batch_size`                   | Secondary capacity and optimization controls.                                                                   |
 
 ## Outputs and run IDs
 

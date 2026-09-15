@@ -10,8 +10,8 @@ model:
 ```
 
 Use `phobert_moe` (default) for the true token-level MoE Transformer with PhoBERT,
-`current_moe` for the scratch baseline, `stronger_moe` for the stronger multi-expert
-scratch variant, or `pretrained_backbone` for PhoBERT followed by a sentence-level MoE head.
+`pretrained_backbone` for PhoBERT followed by a sentence-level MoE head, or
+`dense_phobert` for the dense PhoBERT baseline.
 
 With the default settings, `phobert_moe` loads the full pretrained
 `vinai/phobert-base` encoder (12 layers, hidden size 768, 12 attention heads),

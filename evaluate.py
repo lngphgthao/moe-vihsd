@@ -28,6 +28,24 @@ def resolve_output_path(configured_path, environment_name):
     return Path(os.getenv(environment_name, configured_path)).expanduser()
 
 
+def find_run_checkpoint(run_dir: Path, architecture: str) -> Path:
+    """Find a checkpoint while supporting both new and legacy run folders."""
+    candidates = [
+        run_dir / f"{architecture}_best.safetensors",
+        run_dir / "vihsd_moe_best.safetensors",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    discovered = sorted(run_dir.glob("*_best.safetensors"))
+    if len(discovered) == 1:
+        return discovered[0]
+    if not discovered:
+        raise FileNotFoundError(f"No checkpoint found in run directory: {run_dir}")
+    names = ", ".join(path.name for path in discovered)
+    raise RuntimeError(f"Multiple checkpoints found in {run_dir}; choose one with --checkpoint: {names}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default="configs/vihsd.yaml")
@@ -39,7 +57,8 @@ def main() -> None:
     if args.checkpoint:
         checkpoint_path = Path(args.checkpoint)
     elif args.run_id:
-        checkpoint_path = checkpoint_root / args.run_id / "vihsd_moe_best.safetensors"
+        architecture = str(config.get("model", {}).get("architecture", "phobert_moe"))
+        checkpoint_path = find_run_checkpoint(checkpoint_root / args.run_id, architecture)
     else:
         latest_path = checkpoint_root / "latest_run.json"
         if not latest_path.exists():
