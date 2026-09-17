@@ -1,0 +1,19 @@
+# Stage C: Shared expert + 4 routed experts with learnable residual scale (init 0.1)
+base_config: ../vihsd.yaml
+
+model:
+  architecture: phobert_moe
+  moe_layers: [8, 9, 10, 11]
+  num_experts: 4
+  top_k: 1
+  expert_type: gelu
+  upcycle: true
+  shared_expert: true
+  learnable_residual_scale: true
+  residual_scale_init: 0.1
+
+training:
+  loss_type: cross_entropy
+
+routing:
+  load_balance_loss_factor: 0.01

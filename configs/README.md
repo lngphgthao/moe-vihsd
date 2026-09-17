@@ -50,6 +50,8 @@ Preset experiment configurations are provided in `configs/experiments/`:
 - `stage_a_dense.yaml`: Dense PhoBERT baseline (mean pooling, cross-entropy)
 - `stage_a_moe.yaml`: Standard PhoBERT-MoE control (4 experts, top-1, layers 8-11, GELU, upcycle)
 - `stage_b_shared_expert.yaml`: Shared-plus-routed experts (always-active shared expert + routed experts)
+- `stage_c_res_scale_01.yaml`: Shared + routed experts with learnable residual scale (init 0.1)
+- `stage_c_res_scale_10.yaml`: Shared + routed experts with learnable residual scale (init 1.0)
 - `stage_d_geglu.yaml`: GEGLU gated experts
 - `stage_d_swiglu.yaml`: SwiGLU gated experts
 
