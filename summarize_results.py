@@ -97,6 +97,47 @@ def normalize_pct(val: Any) -> float:
     return f
 
 
+def format_lr(lr: Any) -> str:
+    """Format learning rate in readable scientific notation (e.g. 2e-5)."""
+    if lr is None or lr == "-":
+        return "-"
+    try:
+        f = float(lr)
+        return f"{f:.0e}".replace("e-0", "e-")
+    except Exception:
+        return str(lr)
+
+
+def extract_run_date(run_dir: Path, metrics_path: Path, metrics: dict[str, Any], params: dict[str, Any]) -> str:
+    """Extract or infer the timestamp/date when training was run."""
+    # 1. Check in metrics or params dict
+    for cand in ["timestamp", "created_at", "run_date", "date", "start_time"]:
+        if cand in metrics and metrics[cand]:
+            return str(metrics[cand])
+        if cand in params and params[cand]:
+            return str(params[cand])
+
+    # 2. Check run_dir name for ISO / compact Hanoi timestamp (e.g. 20260916T152900 or 2026-09-16)
+    name = run_dir.name
+    m = re.search(r"(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})", name)
+    if m:
+        return f"{m.group(1)}-{m.group(2)}-{m.group(3)} {m.group(4)}:{m.group(5)}"
+    m = re.search(r"(\d{4}-\d{2}-\d{2}[ _T]\d{2}[:.-]\d{2})", name)
+    if m:
+        return m.group(1).replace("T", " ")
+    m = re.search(r"(\d{4}-\d{2}-\d{2})", name)
+    if m:
+        return m.group(1)
+
+    # 3. Fallback to file modification time
+    try:
+        from datetime import datetime
+        mtime = metrics_path.stat().st_mtime
+        return datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M")
+    except Exception:
+        return "-"
+
+
 def infer_metadata_from_name(name: str) -> dict[str, Any]:
     """Fallback metadata inference from run folder name."""
     lower = name.lower()
@@ -106,10 +147,14 @@ def infer_metadata_from_name(name: str) -> dict[str, Any]:
         meta["architecture"] = "dense_phobert"
         meta["experts"] = "-"
         meta["top_k"] = "-"
+        meta["freeze_attention"] = "-"
+        meta["pooling"] = "mean"
     elif "moe" in lower:
         meta["architecture"] = "phobert_moe"
         meta["experts"] = 4
         meta["top_k"] = 1
+        meta["freeze_attention"] = False
+        meta["pooling"] = "cls"
 
     # Extract num_experts (e.g. nex8, nex2, 8experts, 2experts)
     nex_match = re.search(r"nex(\d+)|(\d+)experts?", lower)
@@ -120,6 +165,25 @@ def infer_metadata_from_name(name: str) -> dict[str, Any]:
     topk_match = re.search(r"top[-_]?k?(\d+)", lower)
     if topk_match:
         meta["top_k"] = int(topk_match.group(1))
+
+    # Extract freeze attention
+    if any(k in lower for k in ["freeze-att", "freeze_att", "frozen-att", "frozen_att", "frozen"]):
+        meta["freeze_attention"] = True
+
+    # Extract learning rate (e.g. 1e-5, 2e-5, 3e-5, 5e-5, lr-1e-5)
+    lr_match = re.search(r"(?:lr[-_]?)?(\d+(?:\.\d+)?e[-_]?\d+)", lower)
+    if lr_match:
+        val_str = lr_match.group(1).replace("_", "")
+        try:
+            meta["learning_rate"] = float(val_str)
+        except Exception:
+            pass
+
+    # Extract pooling
+    if "mean" in lower:
+        meta["pooling"] = "mean"
+    elif "cls" in lower:
+        meta["pooling"] = "cls"
 
     # Extract loss type
     if "wce-balanced" in lower:
@@ -146,6 +210,7 @@ def parse_run(run_dir: Path, metrics_path: Path, results_root: Path) -> dict[str
 
     # 1. Look for hyperparameters / configs
     params: dict[str, Any] = {}
+    raw_config: dict[str, Any] = {}
     for cand_name in ["hyperparameters.json", "resolved_config.yaml", "config.yaml"]:
         cand_path = run_dir / cand_name
         if cand_path.exists():
@@ -153,15 +218,18 @@ def parse_run(run_dir: Path, metrics_path: Path, results_root: Path) -> dict[str
                 if cand_name.endswith(".json"):
                     params = json.loads(cand_path.read_text(encoding="utf-8"))
                 elif cand_name.endswith((".yaml", ".yml")) and yaml is not None:
-                    loaded_yaml = yaml.safe_load(cand_path.read_text(encoding="utf-8"))
-                    if isinstance(loaded_yaml, dict):
+                    raw_config = yaml.safe_load(cand_path.read_text(encoding="utf-8")) or {}
+                    if isinstance(raw_config, dict):
                         params = {
-                            "architecture": loaded_yaml.get("model", {}).get("architecture"),
+                            "architecture": raw_config.get("model", {}).get("architecture"),
                             "flat_hyperparameters": {
-                                "model.architecture": loaded_yaml.get("model", {}).get("architecture"),
-                                "model.num_experts": loaded_yaml.get("model", {}).get("num_experts"),
-                                "model.top_k": loaded_yaml.get("model", {}).get("top_k"),
-                                "training.loss_type": loaded_yaml.get("training", {}).get("loss_type"),
+                                "model.architecture": raw_config.get("model", {}).get("architecture"),
+                                "model.num_experts": raw_config.get("model", {}).get("num_experts"),
+                                "model.top_k": raw_config.get("model", {}).get("top_k"),
+                                "model.freeze_attention": raw_config.get("model", {}).get("freeze_attention"),
+                                "model.pooling": raw_config.get("model", {}).get("pooling"),
+                                "training.learning_rate": raw_config.get("training", {}).get("learning_rate"),
+                                "training.loss_type": raw_config.get("training", {}).get("loss_type"),
                             },
                         }
                 break
@@ -169,14 +237,70 @@ def parse_run(run_dir: Path, metrics_path: Path, results_root: Path) -> dict[str
                 pass
 
     flat_params = params.get("flat_hyperparameters", {})
+    nested_hp = params.get("hyperparameters", {})
     inferred = infer_metadata_from_name(run_id)
 
-    arch = params.get("architecture") or flat_params.get("model.architecture") or inferred.get("architecture", "phobert_moe" if "moe" in run_id else "unknown")
-    num_experts = flat_params.get("model.num_experts") or inferred.get("experts", ("-" if "dense" in str(arch) else 4))
-    top_k = flat_params.get("model.top_k") or inferred.get("top_k", ("-" if "dense" in str(arch) else 1))
-    loss_type = flat_params.get("training.loss_type") or inferred.get("loss_type", "cross_entropy")
+    arch = (
+        params.get("architecture")
+        or flat_params.get("model.architecture")
+        or nested_hp.get("model", {}).get("architecture")
+        or raw_config.get("model", {}).get("architecture")
+        or inferred.get("architecture", "phobert_moe" if "moe" in run_id else "unknown")
+    )
+    is_dense = "dense" in str(arch)
+
+    num_experts = (
+        flat_params.get("model.num_experts")
+        or nested_hp.get("model", {}).get("num_experts")
+        or raw_config.get("model", {}).get("num_experts")
+        or inferred.get("experts", ("-" if is_dense else 4))
+    )
+    top_k = (
+        flat_params.get("model.top_k")
+        or nested_hp.get("model", {}).get("top_k")
+        or raw_config.get("model", {}).get("top_k")
+        or inferred.get("top_k", ("-" if is_dense else 1))
+    )
+
+    # Freeze attention
+    raw_freeze = (
+        flat_params.get("model.freeze_attention")
+        if "model.freeze_attention" in flat_params
+        else nested_hp.get("model", {}).get("freeze_attention", raw_config.get("model", {}).get("freeze_attention"))
+    )
+    if raw_freeze is not None:
+        freeze_attention = bool(raw_freeze)
+    else:
+        freeze_attention = "-" if is_dense else inferred.get("freeze_attention", False)
+
+    # Learning rate
+    learning_rate = (
+        flat_params.get("training.learning_rate")
+        or nested_hp.get("training", {}).get("learning_rate")
+        or raw_config.get("training", {}).get("learning_rate")
+        or inferred.get("learning_rate", 2e-5)
+    )
+
+    # Pooling
+    pooling = (
+        flat_params.get("model.pooling")
+        or nested_hp.get("model", {}).get("pooling")
+        or raw_config.get("model", {}).get("pooling")
+        or inferred.get("pooling", "mean" if is_dense else "cls")
+    )
+
+    # Loss type & profile
+    loss_type = (
+        flat_params.get("training.loss_type")
+        or nested_hp.get("training", {}).get("loss_type")
+        or raw_config.get("training", {}).get("loss_type")
+        or inferred.get("loss_type", "cross_entropy")
+    )
     profile = params.get("profile", "full")
     best_epoch = metrics.get("best_epoch", metrics.get("epoch", "-"))
+
+    # Extract Run Date/Time
+    run_date = extract_run_date(run_dir, metrics_path, metrics, params)
 
     # 2. Extract metrics (support test, validation, and flat metrics schemas)
     test_metrics = metrics.get("test") or {}
@@ -187,13 +311,17 @@ def parse_run(run_dir: Path, metrics_path: Path, results_root: Path) -> dict[str
         test_metrics = metrics
 
     test_macro_f1 = normalize_pct(test_metrics.get("macro_f1", 0.0))
+    test_weighted_f1 = normalize_pct(test_metrics.get("weighted_f1", 0.0))
+    test_acc = normalize_pct(test_metrics.get("accuracy", 0.0))
+
     val_macro_f1 = normalize_pct(val_metrics.get("macro_f1", 0.0))
+    val_weighted_f1 = normalize_pct(val_metrics.get("weighted_f1", 0.0))
+    val_acc = normalize_pct(val_metrics.get("accuracy", 0.0))
 
     # Overall macro_f1 for sorting and primary reporting
     macro_f1 = test_macro_f1 if test_macro_f1 > 0 else val_macro_f1
-
-    acc = normalize_pct(test_metrics.get("accuracy", val_metrics.get("accuracy", 0.0)))
-    weighted_f1 = normalize_pct(test_metrics.get("weighted_f1", val_metrics.get("weighted_f1", 0.0)))
+    weighted_f1 = test_weighted_f1 if test_weighted_f1 > 0 else val_weighted_f1
+    acc = test_acc if test_acc > 0 else val_acc
 
     per_class = test_metrics.get("per_class_f1") or val_metrics.get("per_class_f1") or {}
     f1_clean = normalize_pct(per_class.get("0", per_class.get(0, per_class.get("CLEAN", per_class.get("clean", 0.0)))))
@@ -209,36 +337,50 @@ def parse_run(run_dir: Path, metrics_path: Path, results_root: Path) -> dict[str
 
     return {
         "run_id": run_id,
+        "run_date": run_date,
         "profile": profile,
         "architecture": arch,
         "experts": num_experts,
         "top_k": top_k,
+        "freeze_attention": freeze_attention,
+        "learning_rate": format_lr(learning_rate),
+        "pooling": pooling,
         "loss_type": loss_type,
         "epoch": best_epoch,
-        "routing_entropy": avg_entropy,
         "val_macro_f1": val_macro_f1,
+        "val_weighted_f1": val_weighted_f1,
+        "val_accuracy": val_acc,
         "test_macro_f1": test_macro_f1,
+        "test_weighted_f1": test_weighted_f1,
+        "test_accuracy": test_acc,
         "macro_f1": macro_f1,
         "weighted_f1": weighted_f1,
         "accuracy": acc,
         "f1_clean": f1_clean,
         "f1_offensive": f1_offensive,
         "f1_hate": f1_hate,
+        "routing_entropy": avg_entropy,
     }
 
 
 def format_markdown_table(rows: list[dict[str, Any]]) -> str:
     headers = [
         "Run ID",
+        "Date",
         "Architecture",
         "E",
         "Top-k",
+        "Freeze Attn",
+        "LR",
+        "Pool",
         "Loss",
         "Epoch",
         "Val F1",
-        "Test Macro F1",
-        "Weighted F1",
-        "Accuracy",
+        "Val W-F1",
+        "Val Acc",
+        "Test F1",
+        "Test W-F1",
+        "Test Acc",
         "F1 (Clean)",
         "F1 (Off)",
         "F1 (Hate)",
@@ -253,20 +395,31 @@ def format_markdown_table(rows: list[dict[str, Any]]) -> str:
         entropy_text = "-" if entropy_val is None else f"{entropy_val:.3f}"
         
         val_f1_text = f"{r['val_macro_f1']:.2f}%" if r.get("val_macro_f1", 0) > 0 else "-"
+        val_wf1_text = f"{r['val_weighted_f1']:.2f}%" if r.get("val_weighted_f1", 0) > 0 else "-"
+        val_acc_text = f"{r['val_accuracy']:.2f}%" if r.get("val_accuracy", 0) > 0 else "-"
+
         test_f1_val = r.get("test_macro_f1", 0)
         test_f1_text = f"**{test_f1_val:.2f}%**" if test_f1_val > 0 else "-"
+        test_wf1_text = f"{r['test_weighted_f1']:.2f}%" if r.get("test_weighted_f1", 0) > 0 else "-"
+        test_acc_text = f"{r['test_accuracy']:.2f}%" if r.get("test_accuracy", 0) > 0 else "-"
 
         line = (
             f"| `{r['run_id']}` "
+            f"| {r['run_date']} "
             f"| `{r['architecture']}` "
             f"| {r['experts']} "
             f"| {r['top_k']} "
+            f"| {r['freeze_attention']} "
+            f"| {r['learning_rate']} "
+            f"| {r['pooling']} "
             f"| {r['loss_type']} "
             f"| {r['epoch']} "
             f"| {val_f1_text} "
+            f"| {val_wf1_text} "
+            f"| {val_acc_text} "
             f"| {test_f1_text} "
-            f"| {r['weighted_f1']:.2f}% "
-            f"| {r['accuracy']:.2f}% "
+            f"| {test_wf1_text} "
+            f"| {test_acc_text} "
             f"| {r['f1_clean']:.2f}% "
             f"| {r['f1_offensive']:.2f}% "
             f"| {r['f1_hate']:.2f}% "
@@ -280,35 +433,39 @@ def format_latex_table(rows: list[dict[str, Any]]) -> str:
     lines = [
         r"\begin{table*}[t]",
         r"\centering",
-        r"\small",
-        r"\begin{tabular}{l l c c c c c c c c c}",
+        r"\scriptsize",
+        r"\begin{tabular}{l c l c c c c c c c c c c}",
         r"\toprule",
-        r"\textbf{Run ID} & \textbf{Architecture} & \textbf{E} & \textbf{Top-k} & \textbf{Loss} & \textbf{Val F1} & \textbf{Macro F1} & \textbf{W-F1} & \textbf{Acc} & \textbf{F1-Off} & \textbf{F1-Hate} \\",
+        r"\textbf{Run ID} & \textbf{Date} & \textbf{Arch} & \textbf{E} & \textbf{Top-k} & \textbf{Frz} & \textbf{LR} & \textbf{Pool} & \textbf{Loss} & \textbf{Val F1} & \textbf{Val W-F1} & \textbf{Val Acc} & \textbf{Test F1} \\",
         r"\midrule",
     ]
     for r in rows:
         val_f1_text = f"{r['val_macro_f1']:.2f}" if r.get("val_macro_f1", 0) > 0 else "-"
+        val_wf1_text = f"{r['val_weighted_f1']:.2f}" if r.get("val_weighted_f1", 0) > 0 else "-"
+        val_acc_text = f"{r['val_accuracy']:.2f}" if r.get("val_accuracy", 0) > 0 else "-"
         macro_f1_val = r.get("test_macro_f1", 0) or r.get("macro_f1", 0)
         macro_f1_text = f"\\textbf{{{macro_f1_val:.2f}}}" if macro_f1_val > 0 else "-"
 
         line = (
             f"{r['run_id'].replace('_', r'\_')} & "
+            f"{r['run_date']} & "
             f"{str(r['architecture']).replace('_', r'\_')} & "
             f"{r['experts']} & "
             f"{r['top_k']} & "
+            f"{str(r['freeze_attention'])} & "
+            f"{r['learning_rate']} & "
+            f"{r['pooling']} & "
             f"{str(r['loss_type']).replace('_', r'\_')} & "
             f"{val_f1_text} & "
-            f"{macro_f1_text} & "
-            f"{r['weighted_f1']:.2f} & "
-            f"{r['accuracy']:.2f} & "
-            f"{r['f1_offensive']:.2f} & "
-            f"{r['f1_hate']:.2f} \\\\"
+            f"{val_wf1_text} & "
+            f"{val_acc_text} & "
+            f"{macro_f1_text} \\\\"
         )
         lines.append(line)
     lines.extend([
         r"\bottomrule",
         r"\end{tabular}",
-        r"\caption{Experimental comparison on the ViHSD dataset. Validation Macro F1 is used for checkpoint selection; test Macro F1 is the final confirmation metric.}",
+        r"\caption{Experimental comparison on the ViHSD dataset. Validation metrics guide model selection; Test Macro F1 is the confirmation metric.}",
         r"\label{tab:vihsd_results}",
         r"\end{table*}",
     ])
@@ -371,5 +528,6 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
