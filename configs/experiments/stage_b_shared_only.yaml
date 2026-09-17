@@ -1,0 +1,17 @@
+# Stage B: Shared path only control (no routed experts, shared FFN only)
+base_config: ../vihsd.yaml
+
+model:
+  architecture: phobert_moe
+  moe_layers: [8, 9, 10, 11]
+  num_experts: 0
+  top_k: 1
+  expert_type: gelu
+  upcycle: true
+  shared_expert: true
+
+training:
+  loss_type: cross_entropy
+
+routing:
+  load_balance_loss_factor: 0.0
