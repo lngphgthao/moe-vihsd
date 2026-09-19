@@ -1,0 +1,62 @@
+{
+  "builder_name": "csv",
+  "citation": "",
+  "config_name": "default",
+  "dataset_name": "vihsd",
+  "dataset_size": 2501824,
+  "description": "",
+  "download_checksums": {
+    "hf://datasets/uitnlp/vihsd@88e81b36ca376867640dad9df295e0f7d499ab80/train.csv": {
+      "num_bytes": 1622378,
+      "checksum": null
+    },
+    "hf://datasets/uitnlp/vihsd@88e81b36ca376867640dad9df295e0f7d499ab80/dev.csv": {
+      "num_bytes": 176826,
+      "checksum": null
+    },
+    "hf://datasets/uitnlp/vihsd@88e81b36ca376867640dad9df295e0f7d499ab80/test.csv": {
+      "num_bytes": 442399,
+      "checksum": null
+    }
+  },
+  "download_size": 2241603,
+  "features": {
+    "label_id": {
+      "dtype": "int64",
+      "_type": "Value"
+    },
+    "free_text": {
+      "dtype": "string",
+      "_type": "Value"
+    }
+  },
+  "homepage": "",
+  "license": "",
+  "size_in_bytes": 4743427,
+  "splits": {
+    "train": {
+      "name": "train",
+      "num_bytes": 1810326,
+      "num_examples": 24048,
+      "dataset_name": "vihsd"
+    },
+    "validation": {
+      "name": "validation",
+      "num_bytes": 197544,
+      "num_examples": 2672,
+      "dataset_name": "vihsd"
+    },
+    "test": {
+      "name": "test",
+      "num_bytes": 493954,
+      "num_examples": 6680,
+      "dataset_name": "vihsd"
+    }
+  },
+  "version": {
+    "version_str": "0.0.0",
+    "major": 0,
+    "minor": 0,
+    "patch": 0
+  }
+}

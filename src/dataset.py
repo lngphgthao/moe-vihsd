@@ -51,9 +51,26 @@ def _label_info(dataset, label_column: str) -> tuple[list[str], dict[Any, int]]:
 
 
 def prepare_data(config: dict) -> DatasetBundle:
-    dataset_config = config["config"]
-    kwargs = {} if dataset_config is None else {"name": dataset_config}
-    raw = load_dataset(config["name"], **kwargs)
+    import os
+    dataset_name = config["name"]
+    kaggle_path = "/kaggle/input/vihsd-segmented"
+    local_path = "data/vihsd_segmented"
+    if os.path.isdir(dataset_name):
+        from datasets import load_from_disk
+        print(f"Loading preprocessed dataset from '{dataset_name}'...")
+        raw = load_from_disk(dataset_name)
+    elif os.path.isdir(kaggle_path):
+        from datasets import load_from_disk
+        print(f"Auto-detected Kaggle segmented dataset at '{kaggle_path}', loading...")
+        raw = load_from_disk(kaggle_path)
+    elif os.path.isdir(local_path):
+        from datasets import load_from_disk
+        print(f"Auto-detected local segmented dataset at '{local_path}', loading...")
+        raw = load_from_disk(local_path)
+    else:
+        dataset_config = config["config"]
+        kwargs = {} if dataset_config is None else {"name": dataset_config}
+        raw = load_dataset(dataset_name, **kwargs)
     raw = _ensure_splits(raw, config)
     text_column = config["text_column"]
     label_column = config["label_column"]
