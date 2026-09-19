@@ -1,6 +1,6 @@
 seed: 42
 dataset:
-  name: uitnlp/vihsd
+  name: data/vihsd_segmented
   config: null
   text_column: free_text
   label_column: label_id

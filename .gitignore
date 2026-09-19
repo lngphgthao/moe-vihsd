@@ -31,6 +31,8 @@ data/processed/
 *.arrow
 *.parquet
 *.zip
+!data/vihsd_segmented/
+!data/vihsd_segmented/**
 
 # Training outputs and local experiment artifacts
 results/*
