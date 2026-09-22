@@ -33,6 +33,8 @@ data/processed/
 *.zip
 !data/vihsd_segmented/
 !data/vihsd_segmented/**
+!data/vianli_segmented/
+!data/vianli_segmented/**
 
 # Training outputs and local experiment artifacts
 results/*
