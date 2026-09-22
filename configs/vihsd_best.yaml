@@ -1,0 +1,37 @@
+# Best confirmed ViHSD configuration
+# Architecture: PhoBERT-MoE, All 12 Layers, Non-shared, Top-2, Learnable Residual Scale
+# Val Macro F1: 68.11 ± 1.31 (3 seeds 42/43/44)
+# Test Macro F1: 65.12 ± 0.23 (peak: 65.39% at seed 42)
+# Stage F confirmed finalist — use this config as the starting point for new datasets.
+base_config: vihsd.yaml
+
+seed: 42
+
+dataset:
+  name: data/vihsd_segmented
+  text_column: free_text
+  label_column: label_id
+
+model:
+  architecture: phobert_moe
+  pretrained_model_name: vinai/phobert-base
+  moe_layers: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+  num_experts: 4
+  top_k: 2
+  shared_expert: false
+  expert_type: gelu
+  expert_init_noise: 0.0
+  upcycle: true
+  learnable_residual_scale: true
+  residual_scale_init: 1.0
+  pooling: cls
+
+routing:
+  load_balance_loss_factor: 0.01
+
+training:
+  loss_type: cross_entropy
+  epochs: 5
+  learning_rate: 0.00002
+  batch_size: 16
+  weight_decay: 0.01

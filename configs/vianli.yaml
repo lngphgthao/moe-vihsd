@@ -1,0 +1,53 @@
+# ViANLI experiment configuration
+# Inherits the best confirmed ViHSD architecture (All 12 Layers, Top-2, Learnable Residual Scale,
+# Upcycled, σ=0.0) and adapts it for 3-class adversarial NLI.
+#
+# Run segmentation first:
+#   python scripts/segment_vianli.py --output-dir data/vianli_segmented
+#
+# Then train:
+#   python train.py --config configs/vianli.yaml --no-smoke-test \
+#     --run-id vianli-dense-s42 --set model.architecture=dense_phobert --set seed=42
+#
+#   python train.py --config configs/vianli.yaml --no-smoke-test \
+#     --run-id vianli-moe-all12-s42 --set seed=42
+base_config: vihsd_best.yaml
+
+seed: 42
+
+dataset:
+  name: data/vianli_segmented   # local path to pre-segmented dataset (run segment_vianli.py first)
+  config: null
+  input_mode: nli               # signals premise+hypothesis two-sequence tokenization
+  premise_column: premise
+  hypothesis_column: hypothesis
+  label_column: label
+  # Explicit label order fixes the mapping: entailment=0, contradiction=1, neutral=2
+  label_names: [entailment, contradiction, neutral]
+  tokenizer: vinai/phobert-base
+  max_length: 256               # NLI pairs are longer than single hate-speech posts
+  train_split: train
+  validation_split: validation
+  test_split: test
+  tokenization_num_proc: 2
+
+training:
+  smoke_test: false
+  epochs: 7                     # paper's setting (NLIMoEDynamic used 7 epochs)
+  batch_size: 16
+  learning_rate: 0.00001        # paper's setting (1e-5; their model used this for XLM-R)
+  weight_decay: 0.0             # paper's setting (0.0; no L2 regularization)
+  loss_type: cross_entropy      # ViANLI labels are roughly balanced (no reweighting needed)
+  focal_gamma: 2.0
+  class_weights: null
+  num_workers: 0
+  max_train_samples: null
+  smoke:
+    epochs: 1
+    max_train_samples: 500
+    max_eval_samples: 200
+
+logging:
+  use_wandb: true
+  project: moe-vianli
+  run_name: vianli-moe-all12

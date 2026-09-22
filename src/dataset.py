@@ -1,4 +1,10 @@
-"""ViHSD/Hugging Face dataset loading and PyTorch DataLoader preparation."""
+"""ViHSD/Hugging Face dataset loading and PyTorch DataLoader preparation.
+
+Supports two input modes controlled by ``dataset.input_mode`` in the config:
+- ``"single"`` (default): single text column → ``tokenizer(text, ...)``
+- ``"nli"``: premise + hypothesis columns → ``tokenizer(premise, hypothesis, ...)``
+  with automatic string-to-int label mapping.
+"""
 
 from __future__ import annotations
 
@@ -42,7 +48,17 @@ def _ensure_splits(dataset: DatasetDict, config: dict) -> DatasetDict:
     return dataset
 
 
-def _label_info(dataset, label_column: str) -> tuple[list[str], dict[Any, int]]:
+def _label_info(dataset, label_column: str, label_names_override: list[str] | None = None) -> tuple[list[str], dict[Any, int]]:
+    """Return (label_names, label_to_id mapping).
+
+    Priority:
+    1. ``label_names_override`` from config (used for NLI string labels)
+    2. HuggingFace ``ClassLabel`` feature
+    3. Auto-sorted unique values in the column
+    """
+    if label_names_override:
+        label_to_id = {name: idx for idx, name in enumerate(label_names_override)}
+        return label_names_override, label_to_id
     feature = dataset.features.get(label_column)
     if isinstance(feature, ClassLabel):
         return feature.names, {index: index for index in range(feature.num_classes)}
@@ -50,49 +66,113 @@ def _label_info(dataset, label_column: str) -> tuple[list[str], dict[Any, int]]:
     return [str(value) for value in values], {value: index for index, value in enumerate(values)}
 
 
-def prepare_data(config: dict) -> DatasetBundle:
+def _load_raw(config: dict) -> DatasetDict:
+    """Load the raw dataset from disk or HuggingFace Hub.
+
+    For ViHSD, the segmented on-disk copy is preferred (data/vihsd_segmented).
+    For HuggingFace Hub datasets (e.g. uitnlp/ViANLI), loading from disk is
+    skipped and the dataset is fetched from the Hub directly.
+    """
     import os
     from pathlib import Path
+
     dataset_name = config["name"]
-    kaggle_path = "/kaggle/input/vihsd-segmented"
-    local_path = "data/vihsd_segmented"
-    repo_path = str(Path(__file__).resolve().parent.parent / "data" / "vihsd_segmented")
+
+    # --- Local disk paths (used for pre-segmented copies) ---
+    # Try the exact name as a directory first (works if it is a local path like
+    # "data/vihsd_segmented" or "data/vianli_segmented").
     if os.path.isdir(dataset_name):
         from datasets import load_from_disk
         print(f"Loading preprocessed dataset from '{dataset_name}'...")
-        raw = load_from_disk(dataset_name)
-    elif os.path.isdir(local_path):
-        from datasets import load_from_disk
-        print(f"Loading preprocessed dataset from '{local_path}'...")
-        raw = load_from_disk(local_path)
-    elif os.path.isdir(repo_path):
-        from datasets import load_from_disk
-        print(f"Loading preprocessed dataset from '{repo_path}'...")
-        raw = load_from_disk(repo_path)
-    elif os.path.isdir(kaggle_path):
-        from datasets import load_from_disk
-        print(f"Auto-detected Kaggle segmented dataset at '{kaggle_path}', loading...")
-        raw = load_from_disk(kaggle_path)
-    else:
-        dataset_config = config["config"]
-        kwargs = {} if dataset_config is None else {"name": dataset_config}
-        raw = load_dataset(dataset_name, **kwargs)
-    raw = _ensure_splits(raw, config)
-    text_column = config["text_column"]
-    label_column = config["label_column"]
-    if text_column not in raw[config["train_split"]].column_names:
-        raise KeyError(f"Text column {text_column!r} not found in {raw[config['train_split']].column_names}")
-    if label_column not in raw[config["train_split"]].column_names:
-        raise KeyError(f"Label column {label_column!r} not found in {raw[config['train_split']].column_names}")
+        return load_from_disk(dataset_name)
 
-    raw = raw.filter(lambda example: example[text_column] is not None, desc="Removing examples with missing text")
-    label_names, label_to_id = _label_info(raw[config["train_split"]], label_column)
+    # Legacy fallback paths for ViHSD on Kaggle / local
+    kaggle_path = "/kaggle/input/vihsd-segmented"
+    local_path = "data/vihsd_segmented"
+    repo_path = str(Path(__file__).resolve().parent.parent / "data" / "vihsd_segmented")
+
+    # Only apply the ViHSD-specific fallback when the config actually targets
+    # the ViHSD segmented dataset (avoid accidentally loading the wrong data).
+    if "vihsd" in dataset_name.lower():
+        for path in [local_path, repo_path, kaggle_path]:
+            if os.path.isdir(path):
+                from datasets import load_from_disk
+                print(f"Loading preprocessed dataset from '{path}'...")
+                return load_from_disk(path)
+
+    # --- HuggingFace Hub ---
+    dataset_config = config.get("config")
+    kwargs = {} if dataset_config is None else {"name": dataset_config}
+    print(f"Loading dataset '{dataset_name}' from HuggingFace Hub...")
+    return load_dataset(dataset_name, **kwargs)
+
+
+def prepare_data(config: dict) -> DatasetBundle:
+    input_mode = config.get("input_mode", "single")
+    if input_mode not in ("single", "nli"):
+        raise ValueError(f"Unknown dataset.input_mode '{input_mode}'. Must be 'single' or 'nli'.")
+
+    raw = _load_raw(config)
+    raw = _ensure_splits(raw, config)
+
+    label_column = config["label_column"]
+    label_names_override = config.get("label_names")  # list of strings for NLI
+
+    # --- Validate columns exist ---
+    train_columns = raw[config["train_split"]].column_names
+    if label_column not in train_columns:
+        raise KeyError(f"Label column {label_column!r} not found in {train_columns}")
+    if input_mode == "single":
+        text_column = config["text_column"]
+        if text_column not in train_columns:
+            raise KeyError(f"Text column {text_column!r} not found in {train_columns}")
+    else:  # nli
+        premise_column = config["premise_column"]
+        hypothesis_column = config["hypothesis_column"]
+        for col in (premise_column, hypothesis_column):
+            if col not in train_columns:
+                raise KeyError(f"NLI column {col!r} not found in {train_columns}")
+
+    # --- Filter missing texts ---
+    if input_mode == "single":
+        raw = raw.filter(
+            lambda example: example[text_column] is not None,
+            desc="Removing examples with missing text",
+        )
+    else:
+        raw = raw.filter(
+            lambda example: example[premise_column] is not None and example[hypothesis_column] is not None,
+            desc="Removing examples with missing premise/hypothesis",
+        )
+
+    label_names, label_to_id = _label_info(
+        raw[config["train_split"]], label_column, label_names_override
+    )
     tokenizer = AutoTokenizer.from_pretrained(config["tokenizer"])
 
-    def tokenize(batch):
-        encoded = tokenizer(batch[text_column], truncation=True, padding="max_length", max_length=config["max_length"])
-        encoded["labels"] = [label_to_id[value] for value in batch[label_column]]
-        return encoded
+    # --- Tokenization ---
+    if input_mode == "single":
+        def tokenize(batch):
+            encoded = tokenizer(
+                batch[text_column],
+                truncation=True,
+                padding="max_length",
+                max_length=config["max_length"],
+            )
+            encoded["labels"] = [label_to_id[value] for value in batch[label_column]]
+            return encoded
+    else:
+        def tokenize(batch):
+            # Produces [CLS] premise [SEP] hypothesis [SEP] automatically.
+            encoded = tokenizer(
+                batch[premise_column],
+                batch[hypothesis_column],
+                truncation=True,
+                padding="max_length",
+                max_length=config["max_length"],
+            )
+            encoded["labels"] = [label_to_id[value] for value in batch[label_column]]
+            return encoded
 
     tokenized = raw.map(
         tokenize,
@@ -103,6 +183,7 @@ def prepare_data(config: dict) -> DatasetBundle:
     )
     keep_columns = ["input_ids", "attention_mask", "labels"]
     tokenized.set_format(type="torch", columns=keep_columns)
+
     limit = config.get("max_train_samples")
     if limit:
         train_name = config["train_split"]
