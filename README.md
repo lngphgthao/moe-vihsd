@@ -101,7 +101,7 @@ python train_dense_vianli.py --model-name vinai/phobert-base --seed 42 \
 python train_dense_vianli.py --model-name xlm-roberta-base --seed 42 \
   --run-id vianli-dense-xlmr-s42 --no-smoke-test
 
-python train_dense_vianli.py --model-name bert-base-multilingual-cased --pooling mean \
+python train_dense_vianli.py --model-name bert-base-multilingual-cased --pooling cls \
   --seed 42 --run-id vianli-dense-mbert-s42 --no-smoke-test
 ```
 

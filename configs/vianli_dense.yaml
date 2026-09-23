@@ -16,6 +16,6 @@ model:
   freeze_backbone: false
 
 logging:
-  use_wandb: false
+  use_wandb: true
   project: dense-vianli
   run_name: vianli-dense
