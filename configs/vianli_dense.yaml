@@ -3,6 +3,12 @@
 # Examples: vinai/phobert-base, xlm-roberta-base, bert-base-multilingual-cased
 base_config: vianli.yaml
 
+dataset:
+  # train_dense_vianli.py selects this local path only for PhoBERT runs.
+  segmented_name: data/vianli_segmented
+  original_name: uitnlp/ViANLI
+  name: uitnlp/ViANLI
+
 model:
   architecture: dense_transformer
   pretrained_model_name: vinai/phobert-base

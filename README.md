@@ -90,7 +90,9 @@ Training and evaluation are separate commands. Always use a unique `--run-id` fo
 ### Dense ViANLI baselines
 
 Use the standalone launcher to compare dense Hugging Face encoders without changing Python
-code. The selected encoder and tokenizer are kept in sync automatically.
+code. PhoBERT automatically uses the VnCoreNLP-segmented local dataset; XLM-R, mBERT, and
+other encoders automatically use the original `uitnlp/ViANLI` dataset. The encoder and
+tokenizer are kept in sync.
 
 ```bash
 python train_dense_vianli.py --model-name vinai/phobert-base --seed 42 \
