@@ -7,11 +7,13 @@ from typing import Any
 from models.phobert_moe import PhoBERTMoEClassifier
 from models.legacy.pretrained_backbone import PretrainedBackboneClassifier
 from models.dense_phobert import DensePhoBERTClassifier
+from models.dense_transformer import DenseTransformerClassifier
 
 MODEL_REGISTRY: dict[str, Any] = {
     "pretrained_backbone": PretrainedBackboneClassifier,
     "phobert_moe": PhoBERTMoEClassifier,
     "dense_phobert": DensePhoBERTClassifier,
+    "dense_transformer": DenseTransformerClassifier,
 }
 
 

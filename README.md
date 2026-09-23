@@ -4,11 +4,11 @@ This project trains and evaluates PhoBERT and Mixture of Experts (MoE) architect
 
 ## Choose a workflow
 
-| Workflow       | Start here                                                                        |
-| -------------- | --------------------------------------------------------------------------------- |
+| Workflow       | Start here                                                                                  |
+| -------------- | ------------------------------------------------------------------------------------------- |
 | Kaggle         | Open [main_kaggle.ipynb](notebooks/main_kaggle.ipynb) in Kaggle and follow the setup cells. |
 | Google Colab   | Open [main_colab.ipynb](notebooks/main_colab.ipynb) in Colab and follow the setup cells.    |
-| Local terminal | Install dependencies, authenticate Hugging Face, then run the commands below.     |
+| Local terminal | Install dependencies, authenticate Hugging Face, then run the commands below.               |
 
 ### Local setup
 
@@ -86,6 +86,30 @@ model:
 ## Run an experiment
 
 Training and evaluation are separate commands. Always use a unique `--run-id` for a new experiment.
+
+### Dense ViANLI baselines
+
+Use the standalone launcher to compare dense Hugging Face encoders without changing Python
+code. The selected encoder and tokenizer are kept in sync automatically.
+
+```bash
+python train_dense_vianli.py --model-name vinai/phobert-base --seed 42 \
+  --run-id vianli-dense-phobert-s42 --no-smoke-test
+
+python train_dense_vianli.py --model-name xlm-roberta-base --seed 42 \
+  --run-id vianli-dense-xlmr-s42 --no-smoke-test
+
+python train_dense_vianli.py --model-name bert-base-multilingual-cased --pooling mean \
+  --seed 42 --run-id vianli-dense-mbert-s42 --no-smoke-test
+```
+
+The launcher reuses the shared trainer, selects the best checkpoint by validation macro F1,
+and saves the resolved config, checkpoint, history, and metrics under `checkpoints/` and
+`results/`. Prepare the local dataset first when needed:
+
+```bash
+python scripts/segment_vianli.py --output-dir data/vianli_segmented
+```
 
 ### Train
 

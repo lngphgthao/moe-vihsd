@@ -1,0 +1,15 @@
+# Reproducible dense baselines for ViANLI.
+# Change model.pretrained_model_name to compare another compatible encoder.
+# Examples: vinai/phobert-base, xlm-roberta-base, bert-base-multilingual-cased
+base_config: vianli.yaml
+
+model:
+  architecture: dense_transformer
+  pretrained_model_name: vinai/phobert-base
+  pooling: cls
+  freeze_backbone: false
+
+logging:
+  use_wandb: false
+  project: dense-vianli
+  run_name: vianli-dense

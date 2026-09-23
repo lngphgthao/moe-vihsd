@@ -362,7 +362,7 @@ def main() -> None:
             "test_macro_f1": test_metrics["macro_f1"],
             "test_weighted_f1": test_metrics["weighted_f1"],
         })
-    (checkpoint_root / "latest_run.json").write_text(json.dumps({"run_id": run_id, "checkpoint": str(checkpoint_dir / "vihsd_moe_best.safetensors")}, indent=2), encoding="utf-8")
+    (checkpoint_root / "latest_run.json").write_text(json.dumps({"run_id": run_id, "checkpoint": str(best_checkpoint_path)}, indent=2), encoding="utf-8")
     (results_root / "latest_run.json").write_text(json.dumps({"run_id": run_id, "results_dir": str(results_dir)}, indent=2), encoding="utf-8")
     if wandb_run is not None:
         wandb_run.finish()
