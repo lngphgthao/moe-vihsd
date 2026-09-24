@@ -251,7 +251,9 @@ def main() -> None:
     wandb_run = maybe_start_wandb(config, run_id)
     print(f"Training profile: {'smoke test' if smoke_test else 'full run'}")
     print(f"Run ID: {run_id}")
-    best_macro_f1 = -1.0
+    dataset_name = str(config["dataset"]["name"]).lower()
+    selection_metric_name = "accuracy" if "vianli" in dataset_name else "macro_f1"
+    best_selection_metric = -1.0
     best_record = None
     history = []
     total_epochs = int(config["training"]["epochs"])
@@ -284,8 +286,8 @@ def main() -> None:
         print(record)
         if wandb_run is not None:
             wandb_run.log(record)
-        if val_metrics["macro_f1"] > best_macro_f1:
-            best_macro_f1 = val_metrics["macro_f1"]
+        if val_metrics[selection_metric_name] > best_selection_metric:
+            best_selection_metric = val_metrics[selection_metric_name]
             save_file(
                 {name: tensor.detach().cpu().contiguous() for name, tensor in model.state_dict().items()},
                 str(checkpoint_dir / checkpoint_filename),
