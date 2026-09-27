@@ -29,14 +29,14 @@ training:
     max_train_samples: 2000
     max_eval_samples: 500
 model:
-  architecture: phobert_moe
+  architecture: transformer_moe
   pretrained_model_name: vinai/phobert-base
   # phoBERT MoE settings:
   moe_layers: [8, 9, 10, 11] # layers with FFN replaced by token-level MoE
   num_experts: 4
   top_k: 1
   upcycle: true # clone pretrained PhoBERT FFN weights into all experts
-  shared_expert: false   # true = always-active shared expert (Stage B experiments)
+  shared_expert: false # true = always-active shared expert (Stage B experiments)
   expert_type: gelu # gelu, geglu, or swiglu; gated experts require upcycle=false
   expert_hidden_size: null # null = PhoBERT intermediate size; use 2048 for gated experts
   expert_init_noise: 0.0 # e.g. 0.001 to break identical upcycled expert initialization

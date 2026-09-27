@@ -2,7 +2,7 @@
 base_config: ../vihsd.yaml
 
 model:
-  architecture: phobert_moe
+  architecture: transformer_moe
   moe_layers: [8, 9, 10, 11]
   num_experts: 4
   top_k: 1

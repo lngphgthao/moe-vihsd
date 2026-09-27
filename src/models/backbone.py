@@ -27,7 +27,7 @@ def get_encoder_layers(backbone: Any) -> Any:
         model_type = getattr(getattr(backbone, "config", None), "model_type", "unknown")
         raise ValueError(
             "The selected backbone does not expose an encoder.layer stack required by "
-            f"phobert_moe (model_type={model_type!r}). Use a BERT/RoBERTa-style encoder."
+            f"transformer_moe (model_type={model_type!r}). Use a BERT/RoBERTa-style encoder."
         )
     if len(layers) == 0:
         raise ValueError("The selected backbone has no encoder layers.")
@@ -35,6 +35,6 @@ def get_encoder_layers(backbone: Any) -> Any:
         if not all(hasattr(layer, attribute) for attribute in ("attention", "intermediate", "output")):
             raise ValueError(
                 f"Backbone encoder layer {index} is missing attention/intermediate/output "
-                "modules required by phobert_moe."
+                "modules required by transformer_moe."
             )
     return layers

@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.models.moe.layer import PhoBERTMoEClassifier
+from src.models.moe.layer import TransformerMoEClassifier
 from src.models.dense import DenseTransformerClassifier
 
 MODEL_REGISTRY: dict[str, Any] = {
-    "phobert_moe": PhoBERTMoEClassifier,
+    "transformer_moe": TransformerMoEClassifier,
+    # Compatibility alias for historical configurations and saved runs.
+    "phobert_moe": TransformerMoEClassifier,
     "dense_transformer": DenseTransformerClassifier,
     # Compatibility alias for historical configs and saved experiment metadata.
     "dense_phobert": DenseTransformerClassifier,
@@ -17,7 +19,7 @@ MODEL_REGISTRY: dict[str, Any] = {
 
 def validate_model_config(config: dict) -> str:
     """Validate architecture-specific settings before loading model weights."""
-    architecture = str(config.get("architecture", "phobert_moe"))
+    architecture = str(config.get("architecture", "transformer_moe"))
     if architecture not in MODEL_REGISTRY:
         supported = ", ".join(sorted(MODEL_REGISTRY))
         raise ValueError(

@@ -6,14 +6,15 @@ The config includes a `model.architecture` field so the same workflow can run mu
 
 ```yaml
 model:
-  architecture: phobert_moe
+  architecture: transformer_moe
 ```
 
-Use `phobert_moe` (default) for the true token-level MoE Transformer, or
+Use `transformer_moe` (default) for the true token-level MoE Transformer, or
 `dense_transformer` for dense Hugging Face baselines. `dense_phobert` remains a
-compatibility alias for older configurations.
+compatibility alias for older configurations, and `phobert_moe` remains a
+compatibility alias for older MoE configurations.
 
-With the default settings, `phobert_moe` loads the full pretrained
+With the default settings, `transformer_moe` loads the full pretrained
 `vinai/phobert-base` encoder (12 layers, hidden size 768, 12 attention heads),
 keeps its embeddings and self-attention, and replaces the feed-forward network in
 layers 8-11 (zero-based) with a token-level Sparse MoE block. Each replaced layer

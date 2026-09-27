@@ -146,7 +146,7 @@ def create_hyperparameters_log(config, run_id, smoke_test):
         "model": config["model"],
         "routing": config["routing"],
     }
-    architecture = config.get("model", {}).get("architecture", "phobert_moe")
+    architecture = config.get("model", {}).get("architecture", "transformer_moe")
     return {
         "run_id": run_id,
         "profile": "smoke" if smoke_test else "full",
@@ -221,7 +221,7 @@ def main() -> None:
     )
     bundle = prepare_data(data_config)
     model_config = {**config["model"], "pad_token_id": bundle.tokenizer.pad_token_id or 0}
-    model_config.setdefault("architecture", "phobert_moe")
+    model_config.setdefault("architecture", "transformer_moe")
     model = build_model(model_config, bundle.tokenizer.vocab_size, bundle.num_labels).to(device)
     checkpoint_filename = f"{model_config['architecture']}_best.safetensors"
     print("Model architecture:")
@@ -229,7 +229,7 @@ def main() -> None:
     if model_config["architecture"] in {"dense_transformer", "dense_phobert"}:
         print(f"  pretrained_model_name: {model_config.get('pretrained_model_name')}")
         print(f"  freeze_backbone: {model_config.get('freeze_backbone')}")
-    if model_config["architecture"] == "phobert_moe":
+    if model_config["architecture"] in {"transformer_moe", "phobert_moe"}:
         print(f"  pretrained_model_name: {model_config.get('pretrained_model_name')}")
         print(f"  moe_layers: {model_config.get('moe_layers', [8, 9, 10, 11])}")
         print(f"  freeze_attention: {model_config.get('freeze_attention', False)}")
@@ -239,12 +239,12 @@ def main() -> None:
     balance_factor = float(config["routing"]["load_balance_loss_factor"])
     checkpoint_root = resolve_output_path(config["paths"]["checkpoint_dir"], "CHECKPOINT_DIR")
     checkpoint_dir = checkpoint_root / run_id
+    results_root = resolve_output_path(config["paths"]["results_dir"], "RESULTS_DIR")
     if checkpoint_dir.exists() or (results_root / run_id).exists():
         raise FileExistsError(
             f"Run ID already exists: {run_id}. Choose a new ID to avoid overwriting results."
         )
     checkpoint_dir.mkdir(parents=True, exist_ok=False)
-    results_root = resolve_output_path(config["paths"]["results_dir"], "RESULTS_DIR")
     results_dir = results_root / run_id
     results_dir.mkdir(parents=True, exist_ok=False)
     (checkpoint_dir / "resolved_config.yaml").write_text(

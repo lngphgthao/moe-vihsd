@@ -58,7 +58,8 @@ The architectures are selected through the shared model factory in [src/models/f
 
 Available architecture names:
 
-- `phobert_moe` — true token-level MoE Transformer: loads a compatible BERT/RoBERTa-family encoder and replaces selected internal FFNs with Sparse MoE layers in [src/models/moe/layer.py](src/models/moe/layer.py)
+- `transformer_moe` — true token-level MoE Transformer: loads a compatible BERT/RoBERTa-family encoder and replaces selected internal FFNs with Sparse MoE layers in [src/models/moe/layer.py](src/models/moe/layer.py)
+- `phobert_moe` — compatibility alias for older MoE configurations
 - `dense_transformer` — generic dense classifier for any compatible Hugging Face encoder
 - `dense_phobert` — compatibility alias for `dense_transformer`
 
@@ -68,10 +69,10 @@ Example:
 
 ```bash
 # True MoE Transformer (Full fine-tuning, default):
-python train.py --config configs/vihsd.yaml --set model.architecture=phobert_moe --run-id phobert-moe-full
+python train.py --config configs/vihsd.yaml --set model.architecture=transformer_moe --run-id transformer-moe-full
 
 # True MoE Transformer (Parameter-efficient / frozen attention):
-python train.py --config configs/vihsd.yaml --set model.architecture=phobert_moe --set model.freeze_attention=true --run-id phobert-moe-peft
+python train.py --config configs/vihsd.yaml --set model.architecture=transformer_moe --set model.freeze_attention=true --run-id transformer-moe-peft
 
 # Dense baseline:
 python train.py --config configs/vihsd.yaml --set model.architecture=dense_phobert --set model.pooling=mean --run-id dense-phobert-integrated
@@ -81,7 +82,7 @@ The YAML default is:
 
 ```yaml
 model:
-  architecture: phobert_moe
+  architecture: transformer_moe
   pretrained_model_name: vinai/phobert-base
 ```
 
@@ -101,7 +102,7 @@ python train.py --config configs/vihsd.yaml --no-smoke-test \
   --set model.pooling=cls
 ```
 
-`phobert_moe` requires a BERT/RoBERTa-style encoder with `encoder.layer`; XLM-R and mBERT
+`transformer_moe` requires a BERT/RoBERTa-style encoder with `encoder.layer`; XLM-R and mBERT
 are supported. Other Hugging Face encoders can be used with `dense_transformer` when they
 provide `last_hidden_state` and a `hidden_size` configuration value.
 
@@ -130,7 +131,7 @@ These are the defaults from `configs/vihsd.yaml`. A child config can override th
 | `dataset.name`                     | `data/vihsd_segmented` | Dataset path or Hugging Face dataset ID.                                                                                       |
 | `dataset.tokenizer`                | `vinai/phobert-base`   | Fallback tokenizer. It is automatically replaced by `model.pretrained_model_name` when that value is set.                      |
 | `dataset.max_length`               | `128`                  | Maximum token sequence length; longer inputs are truncated and shorter inputs are padded.                                      |
-| `model.architecture`               | `phobert_moe`          | Selects `phobert_moe`, `dense_transformer`, or the compatibility alias `dense_phobert`.                                        |
+| `model.architecture`               | `transformer_moe`      | Selects `transformer_moe`, `dense_transformer`, or compatibility aliases.                                                      |
 | `model.pretrained_model_name`      | `vinai/phobert-base`   | Hugging Face model ID or local path for the encoder and tokenizer. Change this for XLM-R or mBERT.                             |
 | `model.moe_layers`                 | `[8, 9, 10, 11]`       | Zero-based encoder layers whose FFNs are replaced by MoE. Supports lists and values such as `all`, `last_4`, or `alternating`. |
 | `model.num_experts`                | `4`                    | Number of routed experts per MoE layer. Set to `0` for shared-expert-only controls.                                            |
@@ -194,7 +195,7 @@ python train.py \
   --config configs/vihsd.yaml \
   --no-smoke-test \
   --run-id phobert-moe-integrated \
-  --set model.architecture=phobert_moe
+  --set model.architecture=transformer_moe
 ```
 
 For the dense PhoBERT baseline, use the integrated pipeline so the dataset,
@@ -257,7 +258,7 @@ python train.py \
   --config configs/vihsd.yaml \
   --no-smoke-test \
   --run-id phobert-moe-experiment \
-  --set model.architecture=phobert_moe \
+  --set model.architecture=transformer_moe \
   --set model.num_experts=4 \
   --set model.top_k=1 \
   --set training.loss_type=cross_entropy

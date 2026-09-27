@@ -150,7 +150,7 @@ def infer_metadata_from_name(name: str) -> dict[str, Any]:
         meta["freeze_attention"] = "-"
         meta["pooling"] = "mean"
     elif "moe" in lower:
-        meta["architecture"] = "phobert_moe"
+        meta["architecture"] = "transformer_moe"
         meta["experts"] = 4
         meta["top_k"] = 1
         meta["freeze_attention"] = False
@@ -245,7 +245,7 @@ def parse_run(run_dir: Path, metrics_path: Path, results_root: Path) -> dict[str
         or flat_params.get("model.architecture")
         or nested_hp.get("model", {}).get("architecture")
         or raw_config.get("model", {}).get("architecture")
-        or inferred.get("architecture", "phobert_moe" if "moe" in run_id else "unknown")
+        or inferred.get("architecture", "transformer_moe" if "moe" in run_id else "unknown")
     )
     is_dense = "dense" in str(arch)
 

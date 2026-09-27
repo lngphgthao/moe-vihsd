@@ -1,4 +1,4 @@
-"""True token-level Mixture of Experts (MoE) Transformer using PhoBERT backbone."""
+"""True token-level Mixture of Experts Transformer for BERT-family backbones."""
 
 from __future__ import annotations
 
@@ -13,8 +13,8 @@ from src.models.moe.ffn import Expert
 from src.models.moe.router import TopKRouter
 
 
-class PhoBERTMoELayer(nn.Module):
-    """Replaces a standard RoBERTa/PhoBERT layer's FFN with a token-level MoE block."""
+class TransformerMoELayer(nn.Module):
+    """Replaces a standard BERT-family layer's FFN with a token-level MoE block."""
 
     def __init__(
         self,
@@ -213,8 +213,8 @@ class PhoBERTClassificationHead(nn.Module):
         return self.out_proj(x)
 
 
-class PhoBERTMoEClassifier(nn.Module):
-    """True MoE Transformer: PhoBERT with internal FFNs replaced by Sparse MoE layers."""
+class TransformerMoEClassifier(nn.Module):
+    """True MoE Transformer with selected internal FFNs replaced by Sparse MoE layers."""
 
     def __init__(self, vocab_size: int, num_labels: int, config: dict) -> None:
         super().__init__()
@@ -259,13 +259,13 @@ class PhoBERTMoEClassifier(nn.Module):
             target_indices = set(range(total_layers - 4, total_layers))
 
         self.moe_layer_indices = sorted(target_indices)
-        self.moe_layers: dict[str, PhoBERTMoELayer] = {}
+        self.moe_layers: dict[str, TransformerMoELayer] = {}
 
         for idx in self.moe_layer_indices:
             if not (0 <= idx < total_layers):
                 raise ValueError(f"moe_layer index {idx} out of range [0, {total_layers - 1}]")
             orig_layer = encoder_layers[idx]
-            moe_layer = PhoBERTMoELayer(
+            moe_layer = TransformerMoELayer(
                 original_layer=orig_layer,
                 num_experts=num_experts,
                 top_k=top_k,

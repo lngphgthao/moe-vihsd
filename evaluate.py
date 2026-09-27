@@ -36,7 +36,7 @@ def main() -> None:
     if args.checkpoint:
         checkpoint_path = Path(args.checkpoint)
     elif args.run_id:
-        architecture = str(config.get("model", {}).get("architecture", "phobert_moe"))
+        architecture = str(config.get("model", {}).get("architecture", "transformer_moe"))
         checkpoint_path = find_run_checkpoint(checkpoint_root / args.run_id, architecture)
     else:
         latest_path = checkpoint_root / "latest_run.json"
@@ -54,7 +54,7 @@ def main() -> None:
     )
     bundle = prepare_data(data_config)
     model_config = {**config["model"], "pad_token_id": bundle.tokenizer.pad_token_id or 0}
-    model_config.setdefault("architecture", "phobert_moe")
+    model_config.setdefault("architecture", "transformer_moe")
     model = build_model(model_config, bundle.tokenizer.vocab_size, bundle.num_labels).to(device)
     model.load_state_dict(load_file(str(checkpoint_path), device=str(device)))
     model.eval()
