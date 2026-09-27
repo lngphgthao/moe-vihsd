@@ -93,7 +93,7 @@ def train_epoch(model, loader, optimizer, device, balance_factor, epoch, total_e
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()
         total_loss += loss.item() * labels.size(0)
-        total_auxiliary_loss += float(balance_loss) * labels.size(0)
+        total_auxiliary_loss += balance_loss.detach().item() * labels.size(0)
         preds = logits.argmax(dim=-1).cpu().tolist()
         labs = labels.cpu().tolist()
         all_preds.extend(preds)
