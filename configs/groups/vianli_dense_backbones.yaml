@@ -1,6 +1,6 @@
 # Stage 1 dense backbone comparison.
-base_config: configs/vianli.yaml
-seeds: [42, 43, 44]
+base_config: configs/vianli_dense.yaml
+seeds: [43, 44]
 runs:
   - id: vianli-dense-mbert
     overrides:
