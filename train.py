@@ -259,7 +259,7 @@ def main() -> None:
     print(f"Training profile: {'smoke test' if smoke_test else 'full run'}")
     print(f"Run ID: {run_id}")
     dataset_name = str(config["dataset"]["name"]).lower()
-    selection_metric_name = "accuracy" if "vianli" in dataset_name else "macro_f1"
+    selection_metric_name = "macro_f1"
     best_selection_metric = -1.0
     best_record = None
     history = []
