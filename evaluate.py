@@ -19,9 +19,9 @@ import yaml
 from safetensors.torch import load_file
 from tqdm.auto import tqdm
 
-from models.factory import build_model, standardize_model_output
-from src.dataset import prepare_data
-from src.metrics import compute_classification_metrics, format_classification_report
+from src.models.factory import build_model, standardize_model_output
+from src.data.loader import prepare_data
+from src.evaluation.metrics import compute_classification_metrics, format_classification_report
 from src.utils import find_run_checkpoint, load_config, resolve_output_path
 
 
@@ -48,7 +48,11 @@ def main() -> None:
         config = load_config(resolved_config_path)
         print(f"Using run configuration: {resolved_config_path}")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    bundle = prepare_data({**config["dataset"], **config["training"]})
+    data_config = {**config["dataset"], **config["training"]}
+    data_config["tokenizer"] = config["model"].get(
+        "pretrained_model_name", data_config.get("tokenizer")
+    )
+    bundle = prepare_data(data_config)
     model_config = {**config["model"], "pad_token_id": bundle.tokenizer.pad_token_id or 0}
     model_config.setdefault("architecture", "phobert_moe")
     model = build_model(model_config, bundle.tokenizer.vocab_size, bundle.num_labels).to(device)

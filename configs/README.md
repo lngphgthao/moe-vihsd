@@ -9,9 +9,9 @@ model:
   architecture: phobert_moe
 ```
 
-Use `phobert_moe` (default) for the true token-level MoE Transformer with PhoBERT,
-`pretrained_backbone` for PhoBERT followed by a sentence-level MoE head, or
-`dense_phobert` for the dense PhoBERT baseline.
+Use `phobert_moe` (default) for the true token-level MoE Transformer, or
+`dense_transformer` for dense Hugging Face baselines. `dense_phobert` remains a
+compatibility alias for older configurations.
 
 With the default settings, `phobert_moe` loads the full pretrained
 `vinai/phobert-base` encoder (12 layers, hidden size 768, 12 attention heads),
@@ -40,13 +40,10 @@ PhoBERT FFN cannot be copied directly into a three-projection gated expert.
 The default `expert_type: gelu`, `expert_init_noise: 0.0`, fixed residual scale,
 and `upcycle: true` preserve the original experiment.
 
-This is different from `pretrained_backbone`, which runs the complete PhoBERT
-encoder unchanged, pools its sequence output to one sentence vector, and sends
-that single vector through one sentence-level MoE head.
-
 ## Experiment Overlays
 
 Preset experiment configurations are provided in `configs/experiments/`:
+
 - `stage_a_dense.yaml`: Dense PhoBERT baseline (mean pooling, cross-entropy)
 - `stage_a_moe.yaml`: Standard PhoBERT-MoE control (4 experts, top-1, layers 8-11, GELU, upcycle)
 - `stage_b_shared_expert.yaml`: Shared-plus-routed experts (always-active shared expert + routed experts)
@@ -61,4 +58,3 @@ Each overlay specifies `base_config: ../vihsd.yaml` to inherit default hyperpara
 python train.py --config configs/experiments/stage_a_dense.yaml --run-id dense-s42 --set seed=42
 python train.py --config configs/experiments/stage_d_geglu.yaml --run-id geglu-s42 --set seed=42
 ```
-

@@ -1,0 +1,36 @@
+# Reserved ViANLI research workflow. Selection uses validation macro F1 only.
+project: vianli_moe
+primary_metric: validation.macro_f1
+test_policy: final_confirmation_only
+seeds: [42, 43, 44]
+
+stages:
+  stage_1_dense_backbones:
+    candidates:
+      - bert-base-multilingual-cased
+      - vinai/phobert-base
+      - xlm-roberta-base
+      - xlm-roberta-large
+  stage_2_moe_placement:
+    candidates: [none, last_4, last_6, alternating, all]
+  stage_3_expert_count:
+    candidates: [2, 4, 8]
+    optional: [5]
+  stage_4_routing:
+    candidates: [1, 2]
+    optional: [4]
+  stage_5_capacity_factor:
+    candidates: [0.5, 1.0, 2.0]
+  stage_6_load_balance:
+    candidates: [0.0, 0.001, 0.01]
+  stage_7_regularization:
+    weight_decay: [0.0, 0.001, 0.01]
+    dropout: [0.1, 0.2, 0.4]
+
+defaults:
+  max_length: 256
+  batch_size: 16
+  optimizer: adamw
+  learning_rate: 0.00001
+  epochs: 7
+  seed: 42

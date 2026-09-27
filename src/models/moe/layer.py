@@ -8,10 +8,9 @@ from typing import Any
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from transformers import AutoModel
-
-from models.expert import Expert
-from models.router import TopKRouter
+from src.models.backbone import get_encoder_layers, load_moe_backbone
+from src.models.moe.ffn import Expert
+from src.models.moe.router import TopKRouter
 
 
 class PhoBERTMoELayer(nn.Module):
@@ -220,8 +219,9 @@ class PhoBERTMoEClassifier(nn.Module):
     def __init__(self, vocab_size: int, num_labels: int, config: dict) -> None:
         super().__init__()
         self.model_name = config.get("pretrained_model_name", "vinai/phobert-base")
-        self.roberta = AutoModel.from_pretrained(self.model_name)
-        total_layers = len(self.roberta.encoder.layer)
+        self.roberta = load_moe_backbone(self.model_name)
+        encoder_layers = get_encoder_layers(self.roberta)
+        total_layers = len(encoder_layers)
 
         num_experts = int(config.get("num_experts", 4))
         top_k = int(config.get("top_k", 1))
@@ -264,7 +264,7 @@ class PhoBERTMoEClassifier(nn.Module):
         for idx in self.moe_layer_indices:
             if not (0 <= idx < total_layers):
                 raise ValueError(f"moe_layer index {idx} out of range [0, {total_layers - 1}]")
-            orig_layer = self.roberta.encoder.layer[idx]
+            orig_layer = encoder_layers[idx]
             moe_layer = PhoBERTMoELayer(
                 original_layer=orig_layer,
                 num_experts=num_experts,
@@ -278,7 +278,7 @@ class PhoBERTMoEClassifier(nn.Module):
                 residual_scale_init=residual_scale_init,
                 use_shared_expert=use_shared_expert,
             )
-            self.roberta.encoder.layer[idx] = moe_layer
+            encoder_layers[idx] = moe_layer
             self.moe_layers[str(idx)] = moe_layer
 
         hidden_size = self.roberta.config.hidden_size
@@ -297,12 +297,13 @@ class PhoBERTMoEClassifier(nn.Module):
 
         if self.freeze_attention:
             # Freeze self-attention in all layers
-            for layer in self.roberta.encoder.layer:
+            encoder_layers = get_encoder_layers(self.roberta)
+            for layer in encoder_layers:
                 for param in layer.attention.parameters():
                     param.requires_grad = False
 
             # Freeze intermediate and output in any remaining dense (non-MoE) layers
-            for idx, layer in enumerate(self.roberta.encoder.layer):
+            for idx, layer in enumerate(encoder_layers):
                 if idx not in self.moe_layer_indices:
                     for param in layer.intermediate.parameters():
                         param.requires_grad = False

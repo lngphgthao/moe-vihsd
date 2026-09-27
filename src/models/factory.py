@@ -4,16 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from models.phobert_moe import PhoBERTMoEClassifier
-from models.legacy.pretrained_backbone import PretrainedBackboneClassifier
-from models.dense_phobert import DensePhoBERTClassifier
-from models.dense_transformer import DenseTransformerClassifier
+from src.models.moe.layer import PhoBERTMoEClassifier
+from src.models.dense import DenseTransformerClassifier
 
 MODEL_REGISTRY: dict[str, Any] = {
-    "pretrained_backbone": PretrainedBackboneClassifier,
     "phobert_moe": PhoBERTMoEClassifier,
-    "dense_phobert": DensePhoBERTClassifier,
     "dense_transformer": DenseTransformerClassifier,
+    # Compatibility alias for historical configs and saved experiment metadata.
+    "dense_phobert": DenseTransformerClassifier,
 }
 
 
@@ -25,13 +23,6 @@ def validate_model_config(config: dict) -> str:
         raise ValueError(
             f"Unknown model architecture '{architecture}'. Supported architectures: {supported}"
         )
-    if architecture == "dense_phobert":
-        pooling = str(config.get("pooling", "mean")).lower()
-        if pooling != "mean":
-            raise ValueError(
-                "dense_phobert requires model.pooling=mean. "
-                "Pass --set model.pooling=mean when using the shared config."
-            )
     return architecture
 
 

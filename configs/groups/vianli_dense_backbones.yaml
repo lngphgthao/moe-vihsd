@@ -1,0 +1,22 @@
+# Stage 1 dense backbone comparison.
+base_config: configs/vianli.yaml
+seeds: [42, 43, 44]
+runs:
+  - id: vianli-dense-mbert
+    overrides:
+      model.architecture: dense_transformer
+      model.pretrained_model_name: bert-base-multilingual-cased
+      dataset.name: uitnlp/ViANLI
+      dataset.tokenizer: bert-base-multilingual-cased
+  - id: vianli-dense-phobert
+    overrides:
+      model.architecture: dense_transformer
+      model.pretrained_model_name: vinai/phobert-base
+      dataset.name: data/vianli_segmented
+      dataset.tokenizer: vinai/phobert-base
+  - id: vianli-dense-xlmr
+    overrides:
+      model.architecture: dense_transformer
+      model.pretrained_model_name: xlm-roberta-base
+      dataset.name: uitnlp/ViANLI
+      dataset.tokenizer: xlm-roberta-base

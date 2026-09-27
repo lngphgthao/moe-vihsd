@@ -54,12 +54,13 @@ The credentials are read at runtime and are not stored in the notebook, YAML fil
 
 ## Model architectures
 
-The architectures are selected through the shared model factory in [models/factory.py](models/factory.py).
+The architectures are selected through the shared model factory in [src/models/factory.py](src/models/factory.py).
 
 Available architecture names:
 
-- `phobert_moe` — true token-level MoE Transformer: loads the full pretrained PhoBERT encoder, preserves its embeddings and self-attention, and replaces the selected internal FFNs with Sparse MoE layers. The default converts layers 8-11 (zero-based), with MoE upcycling and configurable layer selection in [models/phobert_moe.py](models/phobert_moe.py)
-- `pretrained_backbone` — PhoBERT contextual encoder followed by a sentence-level MoE head in [models/legacy/pretrained_backbone.py](models/legacy/pretrained_backbone.py)
+- `phobert_moe` — true token-level MoE Transformer: loads a compatible BERT/RoBERTa-family encoder and replaces selected internal FFNs with Sparse MoE layers in [src/models/moe/layer.py](src/models/moe/layer.py)
+- `dense_transformer` — generic dense classifier for any compatible Hugging Face encoder
+- `dense_phobert` — compatibility alias for `dense_transformer`
 
 Select an architecture in the YAML file or override it for one run. No code changes are required.
 
@@ -81,6 +82,85 @@ The YAML default is:
 ```yaml
 model:
   architecture: phobert_moe
+  pretrained_model_name: vinai/phobert-base
+```
+
+All model architectures load the encoder from `model.pretrained_model_name`. Training and
+evaluation automatically use the same model as the tokenizer, so changing this one value is
+enough for compatible multilingual encoders:
+
+```bash
+# XLM-R MoE
+python train.py --config configs/vihsd.yaml --no-smoke-test \
+  --run-id xlmr-moe-s42 --set model.pretrained_model_name=xlm-roberta-base
+
+# mBERT dense baseline
+python train.py --config configs/vihsd.yaml --no-smoke-test \
+  --run-id mbert-dense-s42 --set model.architecture=dense_transformer \
+  --set model.pretrained_model_name=bert-base-multilingual-cased \
+  --set model.pooling=cls
+```
+
+`phobert_moe` requires a BERT/RoBERTa-style encoder with `encoder.layer`; XLM-R and mBERT
+are supported. Other Hugging Face encoders can be used with `dense_transformer` when they
+provide `last_hidden_state` and a `hidden_size` configuration value.
+
+## Argument reference
+
+### Command-line arguments
+
+| Command       | Argument                           | Default                | What it does                                                            |
+| ------------- | ---------------------------------- | ---------------------- | ----------------------------------------------------------------------- |
+| `train.py`    | `--config PATH`                    | `configs/vihsd.yaml`   | Loads the YAML configuration and optional `base_config`.                |
+| `train.py`    | `--set SECTION.KEY=VALUE`          | none                   | Overrides an existing YAML value; repeat it for multiple overrides.     |
+| `train.py`    | `--smoke-test` / `--no-smoke-test` | config value (`false`) | Selects the short validation profile or the full experiment profile.    |
+| `train.py`    | `--run-id ID`                      | timestamped ID         | Names the checkpoint and results directory. Use a unique ID per run.    |
+| `evaluate.py` | `--config PATH`                    | `configs/vihsd.yaml`   | Supplies the configuration used to rebuild the model and data pipeline. |
+| `evaluate.py` | `--run-id ID`                      | latest run             | Evaluates a saved run and loads its resolved configuration.             |
+| `evaluate.py` | `--checkpoint PATH`                | none                   | Evaluates one explicit `.safetensors` checkpoint.                       |
+
+### Configuration arguments
+
+These are the defaults from `configs/vihsd.yaml`. A child config can override them, and
+`--set` can override them for one run.
+
+| Key                                | Default                | What it does                                                                                                                   |
+| ---------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `seed`                             | `42`                   | Seeds Python, NumPy, and PyTorch for reproducible runs.                                                                        |
+| `dataset.name`                     | `data/vihsd_segmented` | Dataset path or Hugging Face dataset ID.                                                                                       |
+| `dataset.tokenizer`                | `vinai/phobert-base`   | Fallback tokenizer. It is automatically replaced by `model.pretrained_model_name` when that value is set.                      |
+| `dataset.max_length`               | `128`                  | Maximum token sequence length; longer inputs are truncated and shorter inputs are padded.                                      |
+| `model.architecture`               | `phobert_moe`          | Selects `phobert_moe`, `dense_transformer`, or the compatibility alias `dense_phobert`.                                        |
+| `model.pretrained_model_name`      | `vinai/phobert-base`   | Hugging Face model ID or local path for the encoder and tokenizer. Change this for XLM-R or mBERT.                             |
+| `model.moe_layers`                 | `[8, 9, 10, 11]`       | Zero-based encoder layers whose FFNs are replaced by MoE. Supports lists and values such as `all`, `last_4`, or `alternating`. |
+| `model.num_experts`                | `4`                    | Number of routed experts per MoE layer. Set to `0` for shared-expert-only controls.                                            |
+| `model.top_k`                      | `1`                    | Number of experts selected for each token.                                                                                     |
+| `model.upcycle`                    | `true`                 | Initializes GELU experts from the pretrained FFN weights.                                                                      |
+| `model.shared_expert`              | `false`                | Adds an always-active expert alongside routed experts.                                                                         |
+| `model.expert_type`                | `gelu`                 | Expert FFN type: `gelu`, `geglu`, or `swiglu`. Gated types require `upcycle=false`.                                            |
+| `model.expert_hidden_size`         | `null`                 | Expert intermediate width; `null` uses the backbone FFN width.                                                                 |
+| `model.expert_init_noise`          | `0.0`                  | Adds Gaussian noise to expert initialization after upcycling.                                                                  |
+| `model.learnable_residual_scale`   | `false`                | Learns the MoE residual multiplier instead of keeping it fixed.                                                                |
+| `model.residual_scale_init`        | `1.0`                  | Initial value of the MoE residual multiplier.                                                                                  |
+| `model.freeze_attention`           | `false`                | Freezes attention modules and dense FFNs in non-MoE layers.                                                                    |
+| `model.freeze_embeddings`          | `false`                | Freezes the backbone embedding parameters.                                                                                     |
+| `model.freeze_backbone`            | `false`                | Freezes the complete encoder for dense or sentence-level classifiers.                                                          |
+| `model.pooling`                    | `cls`                  | Sequence pooling: `cls` uses the first token; `mean` averages non-padding tokens.                                              |
+| `model.dropout`                    | `0.1`                  | Dropout used by classifier and legacy MoE heads.                                                                               |
+| `training.epochs`                  | `5`                    | Number of full training epochs.                                                                                                |
+| `training.batch_size`              | `16`                   | Examples processed per optimization step.                                                                                      |
+| `training.learning_rate`           | `0.00002`              | AdamW learning rate.                                                                                                           |
+| `training.weight_decay`            | `0.01`                 | AdamW L2-style weight decay.                                                                                                   |
+| `training.loss_type`               | `cross_entropy`        | Task loss: `cross_entropy`, weighted cross-entropy, or focal loss.                                                             |
+| `routing.load_balance_loss_factor` | `0.01`                 | Weight of the auxiliary MoE load-balancing loss. Use `0.0` for dense controls.                                                 |
+| `logging.use_wandb`                | `true`                 | Enables Weights & Biases logging; set `false` when W&B is unavailable.                                                         |
+
+For example, switching the complete pipeline to XLM-R requires only:
+
+```bash
+python train.py --config configs/vihsd.yaml --no-smoke-test \
+  --run-id xlmr-moe-s42 \
+  --set model.pretrained_model_name=xlm-roberta-base
 ```
 
 ## Run an experiment
@@ -89,23 +169,17 @@ Training and evaluation are separate commands. Always use a unique `--run-id` fo
 
 ### Dense ViANLI baselines
 
-Use the standalone launcher to compare dense Hugging Face encoders without changing Python
-code. PhoBERT automatically uses the VnCoreNLP-segmented local dataset; XLM-R, mBERT, and
-other encoders automatically use the original `uitnlp/ViANLI` dataset. The encoder and
-tokenizer are kept in sync.
+Use the unified YAML group runner to compare dense Hugging Face encoders and seeds. Each run
+gets a unique generated ID and uses the same trainer, validation selection, checkpoint format,
+and optional W&B logging.
 
 ```bash
-python train_dense_vianli.py --model-name vinai/phobert-base --seed 42 \
-  --run-id vianli-dense-phobert-s42 --no-smoke-test
-
-python train_dense_vianli.py --model-name xlm-roberta-base --seed 42 \
-  --run-id vianli-dense-xlmr-s42 --no-smoke-test
-
-python train_dense_vianli.py --model-name bert-base-multilingual-cased --pooling cls \
-  --seed 42 --run-id vianli-dense-mbert-s42 --no-smoke-test
+python scripts/run_group.py \
+  --group-config configs/groups/vianli_dense_backbones.yaml \
+  --no-smoke-test
 ```
 
-The launcher reuses the shared trainer, selects the best checkpoint by validation macro F1,
+The runner reuses the shared trainer, selects the best checkpoint by validation macro F1,
 and saves the resolved config, checkpoint, history, and metrics under `checkpoints/` and
 `results/`. Prepare the local dataset first when needed:
 
@@ -138,8 +212,7 @@ python train.py \
   --set routing.load_balance_loss_factor=0.0
 ```
 
-`model.pooling=mean` is required because the dense baseline defines mean
-pooling as its architecture. `routing.load_balance_loss_factor=0.0` is
+`routing.load_balance_loss_factor=0.0` is
 explicit documentation that the dense model has no routing loss; it does not
 change the result because the dense model returns no auxiliary loss.
 

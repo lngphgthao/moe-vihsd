@@ -22,10 +22,10 @@ import yaml
 from safetensors.torch import load_file, save_file
 from tqdm.auto import tqdm
 
-from models.factory import build_model, standardize_model_output
-from src.dataset import prepare_data
-from src.losses import compute_task_loss
-from src.metrics import compute_classification_metrics
+from src.models.factory import build_model, standardize_model_output
+from src.data.loader import prepare_data
+from src.training.losses import compute_task_loss
+from src.evaluation.metrics import compute_classification_metrics
 from src.utils import (
     apply_overrides,
     create_run_id,
@@ -216,6 +216,9 @@ def main() -> None:
     set_seed(int(config["seed"]))
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     data_config = {**config["dataset"], **config["training"]}
+    data_config["tokenizer"] = config["model"].get(
+        "pretrained_model_name", data_config.get("tokenizer")
+    )
     bundle = prepare_data(data_config)
     model_config = {**config["model"], "pad_token_id": bundle.tokenizer.pad_token_id or 0}
     model_config.setdefault("architecture", "phobert_moe")
@@ -223,7 +226,7 @@ def main() -> None:
     checkpoint_filename = f"{model_config['architecture']}_best.safetensors"
     print("Model architecture:")
     print(f"  variant: {model_config['architecture']}")
-    if model_config["architecture"] in {"pretrained_backbone", "dense_phobert"}:
+    if model_config["architecture"] in {"dense_transformer", "dense_phobert"}:
         print(f"  pretrained_model_name: {model_config.get('pretrained_model_name')}")
         print(f"  freeze_backbone: {model_config.get('freeze_backbone')}")
     if model_config["architecture"] == "phobert_moe":
@@ -236,10 +239,14 @@ def main() -> None:
     balance_factor = float(config["routing"]["load_balance_loss_factor"])
     checkpoint_root = resolve_output_path(config["paths"]["checkpoint_dir"], "CHECKPOINT_DIR")
     checkpoint_dir = checkpoint_root / run_id
-    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    if checkpoint_dir.exists() or (results_root / run_id).exists():
+        raise FileExistsError(
+            f"Run ID already exists: {run_id}. Choose a new ID to avoid overwriting results."
+        )
+    checkpoint_dir.mkdir(parents=True, exist_ok=False)
     results_root = resolve_output_path(config["paths"]["results_dir"], "RESULTS_DIR")
     results_dir = results_root / run_id
-    results_dir.mkdir(parents=True, exist_ok=True)
+    results_dir.mkdir(parents=True, exist_ok=False)
     (checkpoint_dir / "resolved_config.yaml").write_text(
         yaml.safe_dump(config, sort_keys=False), encoding="utf-8"
     )

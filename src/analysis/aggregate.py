@@ -1,4 +1,4 @@
-"""Aggregate and format experimental results across all training runs."""
+"""Aggregate and format results across dense and MoE experiment groups."""
 
 from __future__ import annotations
 
@@ -440,6 +440,9 @@ def format_latex_table(rows: list[dict[str, Any]]) -> str:
         r"\midrule",
     ]
     for r in rows:
+        escaped_run_id = str(r["run_id"]).replace("_", "\\_")
+        escaped_architecture = str(r["architecture"]).replace("_", "\\_")
+        escaped_loss_type = str(r["loss_type"]).replace("_", "\\_")
         val_f1_text = f"{r['val_macro_f1']:.2f}" if r.get("val_macro_f1", 0) > 0 else "-"
         val_wf1_text = f"{r['val_weighted_f1']:.2f}" if r.get("val_weighted_f1", 0) > 0 else "-"
         val_acc_text = f"{r['val_accuracy']:.2f}" if r.get("val_accuracy", 0) > 0 else "-"
@@ -447,15 +450,15 @@ def format_latex_table(rows: list[dict[str, Any]]) -> str:
         macro_f1_text = f"\\textbf{{{macro_f1_val:.2f}}}" if macro_f1_val > 0 else "-"
 
         line = (
-            f"{r['run_id'].replace('_', r'\_')} & "
+            f"{escaped_run_id} & "
             f"{r['run_date']} & "
-            f"{str(r['architecture']).replace('_', r'\_')} & "
+            f"{escaped_architecture} & "
             f"{r['experts']} & "
             f"{r['top_k']} & "
             f"{str(r['freeze_attention'])} & "
             f"{r['learning_rate']} & "
             f"{r['pooling']} & "
-            f"{str(r['loss_type']).replace('_', r'\_')} & "
+            f"{escaped_loss_type} & "
             f"{val_f1_text} & "
             f"{val_wf1_text} & "
             f"{val_acc_text} & "
@@ -473,7 +476,7 @@ def format_latex_table(rows: list[dict[str, Any]]) -> str:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Summarize ViHSD experiment runs.")
+    parser = argparse.ArgumentParser(description="Aggregate experiment runs into CSV and Markdown.")
     parser.add_argument("--results-dir", default="results", help="Directory containing run results.")
     parser.add_argument("--filter-profile", default=None, choices=["smoke", "full"], help="Filter by profile.")
     parser.add_argument("--sort-by", default="macro_f1", help="Column to sort by (default: macro_f1).")

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import torch
 import torch.nn as nn
-from transformers import AutoModel
+from src.models.backbone import load_backbone
 
 
 class DenseTransformerClassifier(nn.Module):
@@ -14,12 +14,12 @@ class DenseTransformerClassifier(nn.Module):
         super().__init__()
         self.model_name = config.get("pretrained_model_name")
         if not self.model_name:
-            raise ValueError("model.pretrained_model_name is required for dense_transformer")
+            raise ValueError("model.pretrained_model_name is required for dense classification")
         self.pooling = str(config.get("pooling", "cls")).lower()
         if self.pooling not in {"cls", "mean"}:
             raise ValueError("model.pooling must be 'cls' or 'mean'")
         self.freeze_backbone = bool(config.get("freeze_backbone", False))
-        self.backbone = AutoModel.from_pretrained(self.model_name)
+        self.backbone = load_backbone(self.model_name)
         if self.freeze_backbone:
             for parameter in self.backbone.parameters():
                 parameter.requires_grad = False

@@ -4,7 +4,7 @@
 base_config: vianli.yaml
 
 dataset:
-  # train_dense_vianli.py selects this local path only for PhoBERT runs.
+  # Group configs select the segmented path for PhoBERT runs.
   segmented_name: data/vianli_segmented
   original_name: uitnlp/ViANLI
   name: uitnlp/ViANLI
