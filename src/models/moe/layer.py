@@ -10,7 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from src.models.backbone import get_encoder_layers, load_moe_backbone
 from src.models.moe.ffn import Expert
-from src.models.moe.router import TopKRouter
+from src.models.moe.router import DynamicThresholdRouter, TopKRouter
 
 
 class TransformerMoELayer(nn.Module):
@@ -29,6 +29,10 @@ class TransformerMoELayer(nn.Module):
         learnable_residual_scale: bool = False,
         residual_scale_init: float = 1.0,
         use_shared_expert: bool = False,
+        routing_method: str = "top_k",
+        dynamic_static_threshold: float = 0.1,
+        dynamic_threshold_scale: float = 0.1,
+        dynamic_threshold_temperature: float = 0.02,
     ) -> None:
         super().__init__()
         # Preserve original self-attention module
@@ -49,11 +53,20 @@ class TransformerMoELayer(nn.Module):
         self.expert_type = expert_type
         self.expert_hidden_size = expert_hidden_size
         self.use_shared_expert = bool(use_shared_expert)
+        self.routing_method = str(routing_method).lower()
+        if self.routing_method not in {"top_k", "dynamic_threshold"}:
+            raise ValueError("routing_method must be 'top_k' or 'dynamic_threshold'")
 
         self.router = None
         self.experts = nn.ModuleList()
         if self.num_experts > 0:
-            self.router = TopKRouter(hidden_size, self.num_experts, top_k)
+            if self.routing_method == "dynamic_threshold":
+                self.router = DynamicThresholdRouter(
+                    hidden_size, self.num_experts, dynamic_static_threshold,
+                    dynamic_threshold_scale, dynamic_threshold_temperature,
+                )
+            else:
+                self.router = TopKRouter(hidden_size, self.num_experts, top_k)
             self.experts = nn.ModuleList(
                 [Expert(hidden_size, expert_hidden_size, dropout, expert_type) for _ in range(self.num_experts)]
             )
@@ -135,14 +148,25 @@ class TransformerMoELayer(nn.Module):
         flat_tokens = attention_output.reshape(-1, hidden_size)
 
         if self.num_experts > 0:
-            weights, indices, probabilities = self.router(flat_tokens)
+            dynamic_info = None
+            if self.routing_method == "dynamic_threshold":
+                weights, selected, probabilities, complexity, threshold = self.router(flat_tokens)
+                indices = selected.nonzero(as_tuple=False)[:, 1].unsqueeze(-1)
+                dynamic_info = {"selected_mask": selected, "complexity": complexity, "threshold": threshold}
+            else:
+                weights, indices, probabilities = self.router(flat_tokens)
+                selected = None
             moe_output = torch.zeros_like(flat_tokens)
 
             for expert_id, expert in enumerate(self.experts):
-                selected = indices == expert_id
-                if not selected.any():
+                expert_selected = selected[:, expert_id] if selected is not None else indices == expert_id
+                if not expert_selected.any():
                     continue
-                token_positions, choice_positions = selected.nonzero(as_tuple=True)
+                if selected is not None:
+                    token_positions = expert_selected.nonzero(as_tuple=True)[0]
+                    choice_positions = torch.full_like(token_positions, expert_id)
+                else:
+                    token_positions, choice_positions = expert_selected.nonzero(as_tuple=True)
                 expert_out = expert(flat_tokens[token_positions])
                 expert_weight = weights[token_positions, choice_positions].unsqueeze(-1)
                 moe_output.index_add_(0, token_positions, expert_out * expert_weight)
@@ -150,6 +174,8 @@ class TransformerMoELayer(nn.Module):
             moe_output = torch.zeros_like(flat_tokens)
             weights = None
             indices = None
+            selected = None
+            dynamic_info = None
             probabilities = torch.zeros((flat_tokens.shape[0], 0), device=flat_tokens.device, dtype=flat_tokens.dtype)
 
         if self.use_shared_expert:
@@ -179,17 +205,26 @@ class TransformerMoELayer(nn.Module):
         if self.router is not None:
             if valid_mask is not None and valid_mask.any():
                 valid_probs = probabilities[valid_mask]
-                valid_indices = indices[valid_mask]
+                valid_indices = selected[valid_mask] if selected is not None else indices[valid_mask]
                 balance_loss = self.router.load_balance_loss(valid_probs, valid_indices)
+                if self.routing_method == "dynamic_threshold":
+                    dynamic_loss = self.router.dynamic_loss(valid_probs)
+                else:
+                    dynamic_loss = flat_tokens.new_zeros(())
             else:
-                balance_loss = self.router.load_balance_loss(probabilities, indices)
+                balance_loss = self.router.load_balance_loss(probabilities, selected if selected is not None else indices)
+                dynamic_loss = self.router.dynamic_loss(probabilities) if self.routing_method == "dynamic_threshold" else flat_tokens.new_zeros(())
         else:
             balance_loss = torch.tensor(0.0, device=flat_tokens.device, dtype=flat_tokens.dtype)
+            dynamic_loss = flat_tokens.new_zeros(())
+            dynamic_info = None
 
         self.last_routing_info = {
             "balance_loss": balance_loss,
             "top_indices": indices,
             "probabilities": probabilities,
+            "dynamic_loss": dynamic_loss,
+            **(dynamic_info or {}),
         }
 
         # Recent Transformers versions pass each layer output directly to the next layer.
@@ -225,6 +260,7 @@ class TransformerMoEClassifier(nn.Module):
 
         num_experts = int(config.get("num_experts", 4))
         top_k = int(config.get("top_k", 1))
+        routing_method = str(config.get("routing_method", "top_k")).lower()
         self.num_experts = num_experts
         self.top_k = top_k
         dropout = float(config.get("dropout", 0.1))
@@ -277,6 +313,10 @@ class TransformerMoEClassifier(nn.Module):
                 learnable_residual_scale=learnable_residual_scale,
                 residual_scale_init=residual_scale_init,
                 use_shared_expert=use_shared_expert,
+                routing_method=routing_method,
+                dynamic_static_threshold=float(config.get("dynamic_static_threshold", 0.1)),
+                dynamic_threshold_scale=float(config.get("dynamic_threshold_scale", 0.1)),
+                dynamic_threshold_temperature=float(config.get("dynamic_threshold_temperature", 0.02)),
             )
             encoder_layers[idx] = moe_layer
             self.moe_layers[str(idx)] = moe_layer
@@ -324,6 +364,7 @@ class TransformerMoEClassifier(nn.Module):
 
         # Aggregate auxiliary balance loss across all active MoE layers
         total_balance_loss = torch.tensor(0.0, device=input_ids.device)
+        total_dynamic_loss = torch.tensor(0.0, device=input_ids.device)
         layer_routing = {}
         last_top_indices = None
         last_probabilities = None
@@ -332,12 +373,14 @@ class TransformerMoEClassifier(nn.Module):
             info = moe_layer.last_routing_info
             if "balance_loss" in info:
                 total_balance_loss = total_balance_loss + info["balance_loss"]
+                total_dynamic_loss = total_dynamic_loss + info.get("dynamic_loss", 0.0)
                 last_top_indices = info.get("top_indices")
                 last_probabilities = info.get("probabilities")
                 layer_routing[layer_idx_str] = info
 
         aux = {
             "balance_loss": total_balance_loss,
+            "dynamic_loss": total_dynamic_loss,
             "top_indices": last_top_indices,
             "probabilities": last_probabilities,
             "layer_routing": layer_routing,

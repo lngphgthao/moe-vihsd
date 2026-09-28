@@ -88,12 +88,14 @@ def train_epoch(model, loader, optimizer, device, balance_factor, epoch, total_e
         logits, aux = standardize_model_output(model(input_ids, attention_mask))
         classification_loss = compute_task_loss(logits, labels, config)
         balance_loss = aux.get("balance_loss", 0.0)
-        loss = classification_loss + balance_factor * balance_loss
+        dynamic_loss = aux.get("dynamic_loss", 0.0)
+        dynamic_factor = float(config["routing"].get("dynamic_loss_factor", 0.0))
+        loss = classification_loss + balance_factor * balance_loss + dynamic_factor * dynamic_loss
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()
         total_loss += loss.item() * labels.size(0)
-        total_auxiliary_loss += float(balance_loss) * labels.size(0)
+        total_auxiliary_loss += (float(balance_loss) + float(dynamic_loss)) * labels.size(0)
         preds = logits.argmax(dim=-1).cpu().tolist()
         labs = labels.cpu().tolist()
         all_preds.extend(preds)
@@ -159,6 +161,20 @@ def create_hyperparameters_log(config, run_id, smoke_test):
 def collect_routing_diagnostics(model) -> dict:
     """Extract routing entropy and expert load fractions from the last forward pass."""
     diagnostics = {}
+    inner = getattr(model, "module", model)
+    dynamic_info = getattr(inner, "last_routing_info", {})
+    if dynamic_info:
+        probs = dynamic_info["probabilities"]
+        selected = dynamic_info["selected"]
+        entropy = -(probs * torch.log(probs.clamp_min(1e-9))).sum(dim=-1).mean().item()
+        diagnostics["dynamic_moe"] = {
+            "routing_entropy": entropy,
+            "expert_load_fractions": selected.float().mean(dim=0).tolist(),
+            "mean_active_experts": selected.float().sum(dim=-1).mean().item(),
+            "mean_complexity": dynamic_info["complexity"].mean().item(),
+            "mean_threshold": dynamic_info["threshold"].mean().item(),
+        }
+        return diagnostics
     moe_layers = getattr(model, "moe_layers", {})
     if not moe_layers:
         inner = getattr(model, "module", model)
@@ -324,7 +340,11 @@ def main() -> None:
     model.load_state_dict(load_file(str(best_checkpoint_path), device=str(device)))
     test_metrics = evaluate(model, bundle.loaders["test"], device, label_names=bundle.label_names)
     routing_diagnostics = {}
-    if hasattr(model, "moe_layers") or hasattr(getattr(model, "module", model), "moe_layers"):
+    if (
+        hasattr(model, "moe_layers")
+        or hasattr(getattr(model, "module", model), "moe_layers")
+        or model_config["architecture"] == "dynamic_moe"
+    ):
         model.eval()
         with torch.no_grad():
             for batch in bundle.loaders["validation"]:

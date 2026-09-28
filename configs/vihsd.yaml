@@ -34,6 +34,11 @@ model:
   # phoBERT MoE settings:
   moe_layers: [8, 9, 10, 11] # layers with FFN replaced by token-level MoE
   num_experts: 4
+  routing_method: top_k # top_k or dynamic_threshold for transformer_moe
+  dynamic_num_experts: 7 # sequence-level dynamic_moe; NLIMoE paper uses 7
+  dynamic_static_threshold: 0.1 # dynamic_moe or dynamic_threshold routing
+  dynamic_threshold_scale: 0.1 # dynamic_moe or dynamic_threshold routing
+  dynamic_threshold_temperature: 0.02 # straight-through surrogate temperature
   top_k: 1
   upcycle: true # clone pretrained PhoBERT FFN weights into all experts
   shared_expert: false # true = always-active shared expert (Stage B experiments)
@@ -51,6 +56,7 @@ model:
   dropout: 0.1
 routing:
   load_balance_loss_factor: 0.01
+  dynamic_loss_factor: 0.001 # entropy penalty for either dynamic router
 paths:
   checkpoint_dir: checkpoints
   results_dir: results

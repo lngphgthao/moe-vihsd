@@ -27,6 +27,18 @@ attention-plus-MoE block.
 
 The architecture experiments are configurable without changing the model code:
 
+`model.architecture=dynamic_moe` uses the separate sequence-level design from NLIMoE: mean-pool
+the shared encoder output, predict expert probabilities and an input complexity score, select
+experts with `dynamic_static_threshold + dynamic_threshold_scale * complexity`, then normalize
+the selected gate weights. For sequence-level routing, `model.architecture=dynamic_moe` uses
+`model.dynamic_num_experts=7`,
+`model.dynamic_static_threshold=0.1`, `model.dynamic_threshold_scale=0.1`, and
+`routing.dynamic_loss_factor=0.001`. For token-level routing within `transformer_moe`, set
+`model.routing_method=dynamic_threshold`; `top_k` remains the default. The existing
+`routing.load_balance_loss_factor` weights the load-balance term in either MoE. A straight-through
+sigmoid surrogate (temperature `model.dynamic_threshold_temperature=0.02`) supplies gradients
+to the learned complexity gate while the forward pass retains hard threshold selection.
+
 ```yaml
 model:
   learnable_residual_scale: true

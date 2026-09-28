@@ -46,3 +46,50 @@ class TopKRouter(nn.Module):
         importance_loss = self.num_experts * torch.sum(importance * load)
         distribution_loss = F.mse_loss(importance, target) + F.mse_loss(load, target)
         return importance_loss + self.num_experts * distribution_loss
+
+
+class DynamicThresholdRouter(nn.Module):
+    """Per-token NLIMoE-style router with a learned input-complexity threshold."""
+
+    def __init__(self, input_dim: int, num_experts: int, static_threshold: float = 0.1,
+                 threshold_scale: float = 0.1, temperature: float = 0.02) -> None:
+        super().__init__()
+        self.num_experts = int(num_experts)
+        self.static_threshold = float(static_threshold)
+        self.threshold_scale = float(threshold_scale)
+        self.temperature = float(temperature)
+        if self.num_experts < 1:
+            raise ValueError("dynamic routing requires at least one expert")
+        if (self.static_threshold < 0 or self.threshold_scale < 0
+                or self.static_threshold + self.threshold_scale > 1 or self.temperature <= 0):
+            raise ValueError("dynamic threshold range must stay within [0, 1] and temperature must be positive")
+        self.projection = nn.Linear(input_dim, self.num_experts)
+        self.complexity_gate = nn.Linear(input_dim, 1)
+
+    def forward(self, inputs):
+        probabilities = F.softmax(self.projection(inputs), dim=-1)
+        complexity = torch.sigmoid(self.complexity_gate(inputs))
+        threshold = self.static_threshold + self.threshold_scale * complexity
+        selected = probabilities > threshold
+        empty = ~selected.any(dim=-1)
+        if empty.any():
+            selected[empty, probabilities[empty].argmax(dim=-1)] = True
+
+        soft_selected = torch.sigmoid((probabilities - threshold) / self.temperature)
+        selected_st = selected.to(probabilities.dtype) + soft_selected - soft_selected.detach()
+        weights = probabilities * selected_st
+        weights = weights / weights.sum(dim=-1, keepdim=True).clamp_min(1e-9)
+        return weights, selected, probabilities, complexity.squeeze(-1), threshold.squeeze(-1)
+
+    def load_balance_loss(self, probabilities, selected):
+        if probabilities.numel() == 0:
+            return probabilities.new_zeros(())
+        importance = probabilities.mean(dim=0)
+        load = selected.to(probabilities.dtype).mean(dim=0)
+        return self.num_experts * torch.sum(importance * load)
+
+    def dynamic_loss(self, probabilities):
+        if probabilities.numel() == 0:
+            return probabilities.new_zeros(())
+        entropy = -(probabilities * probabilities.clamp_min(1e-9).log()).sum(dim=-1)
+        return entropy.mean() / self.num_experts
