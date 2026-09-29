@@ -1,0 +1,21 @@
+# Best confirmed ViANLI configuration
+# Architecture: XLM-RoBERTa MoE, Layers [6-11] (Last 6 Layers), 4 Experts, Dynamic Threshold Routing
+base_config: vianli.yaml
+
+seed: 42
+
+dataset:
+  name: uitnlp/ViANLI
+  tokenizer: xlm-roberta-base
+
+model:
+  architecture: transformer_moe
+  pretrained_model_name: xlm-roberta-base
+  moe_layers: [6, 7, 8, 9, 10, 11]
+  num_experts: 4
+  routing_method: dynamic_threshold
+
+logging:
+  use_wandb: true
+  project: moe-vianli
+  run_name: vianli-xlmr-moe-last6-e4-dynamic
