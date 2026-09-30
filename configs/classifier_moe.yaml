@@ -1,0 +1,27 @@
+# Classifier-MoE baseline configuration
+# Keeps the Transformer encoder completely dense and routes pooled representations
+# through a Mixture-of-Experts classification head.
+base_config: vihsd.yaml
+
+model:
+  architecture: classifier_moe
+  pretrained_model_name: vinai/phobert-base
+  pooling: cls
+  freeze_backbone: false
+  num_experts: 4
+  top_k: 2
+  expert_hidden_dim: 512
+  dropout: 0.1
+  load_balance_loss_coef: 0.01
+  shared_expert: false
+  use_residual: false
+  routing_type: top_k
+
+routing:
+  load_balance_loss_coef: 0.01
+  load_balance_loss_factor: 0.01
+
+logging:
+  use_wandb: false
+  project: classifier-moe-baseline
+  run_name: vihsd-classifier-moe

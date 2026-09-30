@@ -7,6 +7,7 @@ from typing import Any
 from src.models.moe.layer import TransformerMoEClassifier
 from src.models.dense import DenseTransformerClassifier
 from src.models.dynamic_moe import DynamicMoEClassifier
+from src.models.classifier_moe import ClassifierMoEClassifier
 
 MODEL_REGISTRY: dict[str, Any] = {
     "transformer_moe": TransformerMoEClassifier,
@@ -16,6 +17,8 @@ MODEL_REGISTRY: dict[str, Any] = {
     "dense_transformer": DenseTransformerClassifier,
     # Compatibility alias for historical configs and saved experiment metadata.
     "dense_phobert": DenseTransformerClassifier,
+    "classifier_moe": ClassifierMoEClassifier,
+    "classifier_moe_phobert": ClassifierMoEClassifier,
 }
 
 

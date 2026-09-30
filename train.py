@@ -163,7 +163,7 @@ def collect_routing_diagnostics(model) -> dict:
     diagnostics = {}
     inner = getattr(model, "module", model)
     dynamic_info = getattr(inner, "last_routing_info", {})
-    if dynamic_info:
+    if dynamic_info and "selected" in dynamic_info:
         probs = dynamic_info["probabilities"]
         selected = dynamic_info["selected"]
         entropy = -(probs * torch.log(probs.clamp_min(1e-9))).sum(dim=-1).mean().item()
@@ -175,6 +175,23 @@ def collect_routing_diagnostics(model) -> dict:
             "mean_threshold": dynamic_info["threshold"].mean().item(),
         }
         return diagnostics
+    classifier_moe = getattr(inner, "classifier_moe", None)
+    if classifier_moe is not None:
+        c_info = getattr(classifier_moe, "last_routing_info", {})
+        c_probs = c_info.get("probabilities")
+        c_indices = c_info.get("top_indices")
+        if c_probs is not None and c_indices is not None and c_probs.shape[-1] > 0:
+            c_log_probs = torch.log(c_probs.clamp(min=1e-9))
+            c_entropy = -(c_probs * c_log_probs).sum(dim=-1).mean().item()
+            c_num_experts = c_probs.shape[-1]
+            c_flat_indices = c_indices.reshape(-1)
+            c_counts = torch.bincount(c_flat_indices, minlength=c_num_experts).float()
+            c_fractions = (c_counts / c_counts.sum().clamp_min(1.0)).tolist()
+            diagnostics["classifier_moe"] = {
+                "routing_entropy": c_entropy,
+                "expert_load_fractions": c_fractions,
+            }
+            return diagnostics
     moe_layers = getattr(model, "moe_layers", {})
     if not moe_layers:
         inner = getattr(model, "module", model)
@@ -250,9 +267,24 @@ def main() -> None:
         print(f"  moe_layers: {model_config.get('moe_layers', [8, 9, 10, 11])}")
         print(f"  freeze_attention: {model_config.get('freeze_attention', False)}")
         print(f"  upcycle: {model_config.get('upcycle', True)}")
+    if model_config["architecture"] in {"classifier_moe", "classifier_moe_phobert"}:
+        print(f"  pretrained_model_name: {model_config.get('pretrained_model_name')}")
+        print(f"  num_experts: {model_config.get('num_experts', 4)}")
+        print(f"  top_k: {model_config.get('top_k', 2)}")
+        print(f"  expert_hidden_dim: {model_config.get('expert_hidden_dim', 512)}")
+        print(f"  shared_expert: {model_config.get('shared_expert', False)}")
+        print(f"  use_residual: {model_config.get('use_residual', False)}")
     trainable_params = [p for p in model.parameters() if p.requires_grad]
     optimizer = torch.optim.AdamW(trainable_params, lr=float(config["training"]["learning_rate"]), weight_decay=float(config["training"]["weight_decay"]))
-    balance_factor = float(config["routing"]["load_balance_loss_factor"])
+    routing_cfg = config.get("routing", {})
+    balance_factor = float(
+        routing_cfg.get("load_balance_loss_coef")
+        if routing_cfg.get("load_balance_loss_coef") is not None
+        else routing_cfg.get(
+            "load_balance_loss_factor",
+            config.get("model", {}).get("load_balance_loss_coef", 0.01)
+        )
+    )
     checkpoint_root = resolve_output_path(config["paths"]["checkpoint_dir"], "CHECKPOINT_DIR")
     checkpoint_dir = checkpoint_root / run_id
     results_root = resolve_output_path(config["paths"]["results_dir"], "RESULTS_DIR")
@@ -343,7 +375,9 @@ def main() -> None:
     if (
         hasattr(model, "moe_layers")
         or hasattr(getattr(model, "module", model), "moe_layers")
-        or model_config["architecture"] == "dynamic_moe"
+        or hasattr(model, "classifier_moe")
+        or hasattr(getattr(model, "module", model), "classifier_moe")
+        or model_config["architecture"] in {"dynamic_moe", "classifier_moe", "classifier_moe_phobert"}
     ):
         model.eval()
         with torch.no_grad():
