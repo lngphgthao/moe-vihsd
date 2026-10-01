@@ -1,0 +1,30 @@
+# Hybrid-MoE: XLM-R with last-6 Transformer-MoE encoder + NLIMoE-style dynamic head.
+# Encoder inherits from configs/architectures/vianli_hybrid_moe_xlmr.yaml.
+#
+# Classifier head (NLIMoEDynamic-style):
+#   - 7 experts, per-input dynamic threshold routing
+#   - rho_static = 0.1, complexity scale gamma = 0.1
+#   - loss weights: alpha (dynamic) = 1e-3, beta (load balance) = 1e-2
+#
+# Train example:
+#   python train.py --config configs/architectures/vianli_hybrid_moe_xlmr_nlimoe_head.yaml \
+#     --no-smoke-test --run-id vianli-hybrid-moe-xlmr-last6-e6-nlimoe-head-e7-dynamic-s42
+base_config: vianli_hybrid_moe_xlmr.yaml
+
+model:
+  hybrid_head_type: dynamic_moe
+  dynamic_moe:
+    num_experts: 7
+    routing_type: dynamic
+    static_threshold: 0.1
+    threshold_scale: 0.1
+    threshold_temperature: 0.02
+    expert_hidden_dim: 768
+    dropout: 0.1
+
+routing:
+  load_balance_loss_factor: 0.01
+  dynamic_loss_factor: 0.001
+
+logging:
+  run_name: vianli-hybrid-moe-xlmr-last6-e6-nlimoe-head-e7-dynamic

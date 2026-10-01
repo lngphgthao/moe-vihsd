@@ -130,12 +130,14 @@ class HybridMoEClassifier(nn.Module):
             transformer_routing[layer_name] = info
 
         classifier_balance_loss = classifier_aux["balance_loss"]
+        classifier_dynamic_loss = classifier_aux.get("dynamic_loss", pooled.new_zeros(()))
         aux = {
             "balance_loss": transformer_balance_loss + classifier_balance_loss,
-            "dynamic_loss": transformer_dynamic_loss,
+            "dynamic_loss": transformer_dynamic_loss + classifier_dynamic_loss,
             "transformer_balance_loss": transformer_balance_loss,
             "classifier_balance_loss": classifier_balance_loss,
             "transformer_dynamic_loss": transformer_dynamic_loss,
+            "classifier_dynamic_loss": classifier_dynamic_loss,
             "layer_routing": {**transformer_routing, head_name: classifier_aux},
             head_name: classifier_aux,
         }
