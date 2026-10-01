@@ -239,3 +239,4 @@ class ClassifierMoEClassifier(nn.Module):
             pooled = (hidden_states * mask).sum(dim=1) / mask.sum(dim=1).clamp_min(1.0)
 
         return self.classifier_moe(pooled)
+

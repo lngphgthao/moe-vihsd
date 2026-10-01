@@ -67,3 +67,4 @@ def build_model(config: dict, vocab_size: int, num_labels: int):
             f"Unknown model architecture '{architecture}'. Supported architectures: {supported}"
         ) from exc
     return model_cls(vocab_size, num_labels, config)
+
