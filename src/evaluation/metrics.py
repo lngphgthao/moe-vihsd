@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Sequence
 
 import numpy as np
-from sklearn.metrics import accuracy_score, classification_report, f1_score
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, f1_score
 
 
 def compute_classification_metrics(
@@ -74,3 +74,30 @@ def format_classification_report(
         digits=digits,
         zero_division=0,
     )
+
+
+def compute_prediction_diagnostics(
+    y_true: Sequence[int] | np.ndarray,
+    y_pred: Sequence[int] | np.ndarray,
+    label_names: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    """Return confusion-matrix counts and actual/predicted class distributions."""
+    y_true_arr = np.asarray(y_true, dtype=int)
+    y_pred_arr = np.asarray(y_pred, dtype=int)
+    if label_names is not None:
+        labels = list(range(len(label_names)))
+        names = [str(name) for name in label_names]
+    else:
+        labels = sorted(set(y_true_arr.tolist()) | set(y_pred_arr.tolist()))
+        names = [str(label) for label in labels]
+
+    matrix = confusion_matrix(y_true_arr, y_pred_arr, labels=labels)
+    actual_counts = np.bincount(y_true_arr, minlength=len(labels)).tolist()
+    predicted_counts = np.bincount(y_pred_arr, minlength=len(labels)).tolist()
+    return {
+        "labels": labels,
+        "label_names": names,
+        "confusion_matrix": matrix.tolist(),
+        "actual_class_distribution": dict(zip(names, actual_counts)),
+        "predicted_class_distribution": dict(zip(names, predicted_counts)),
+    }

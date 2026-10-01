@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import os
 import sys
@@ -21,7 +22,11 @@ from tqdm.auto import tqdm
 
 from src.models.factory import build_model, standardize_model_output
 from src.data.loader import prepare_data
-from src.evaluation.metrics import compute_classification_metrics, format_classification_report
+from src.evaluation.metrics import (
+    compute_classification_metrics,
+    compute_prediction_diagnostics,
+    format_classification_report,
+)
 from src.utils import find_run_checkpoint, load_config, resolve_output_path
 
 
@@ -81,6 +86,9 @@ def main() -> None:
             all_labels.extend(labels_cpu)
             predictions.extend({"prediction": int(p), "label": int(l)} for p, l in zip(preds_cpu, labels_cpu))
     cls_metrics = compute_classification_metrics(all_labels, all_preds, label_names=bundle.label_names)
+    prediction_diagnostics = compute_prediction_diagnostics(
+        all_labels, all_preds, label_names=bundle.label_names
+    )
     results = {
         "loss": (total_loss / total_examples) if total_examples > 0 else 0.0,
         "accuracy": cls_metrics["accuracy"],
@@ -90,6 +98,7 @@ def main() -> None:
         "classification_report": cls_metrics["classification_report"],
         "label_names": bundle.label_names,
         "routing_counts": routing_counts.tolist(),
+        **prediction_diagnostics,
         "predictions": predictions,
     }
     results_root = resolve_output_path(config["paths"]["results_dir"], "RESULTS_DIR")
@@ -98,13 +107,34 @@ def main() -> None:
     results_dir.mkdir(parents=True, exist_ok=True)
     output_path = results_dir / "vihsd_predictions.json"
     output_path.write_text(json.dumps(results, indent=2), encoding="utf-8")
+    diagnostics_path = results_dir / "prediction_diagnostics.json"
+    diagnostics_path.write_text(
+        json.dumps(prediction_diagnostics, indent=2), encoding="utf-8"
+    )
+    confusion_csv_path = results_dir / "confusion_matrix.csv"
+    with confusion_csv_path.open("w", newline="", encoding="utf-8") as file:
+        writer = csv.writer(file)
+        writer.writerow(["actual\\predicted", *prediction_diagnostics["label_names"]])
+        writer.writerows(
+            zip(
+                prediction_diagnostics["label_names"],
+                prediction_diagnostics["confusion_matrix"],
+            )
+        )
     print(f"Test loss: {results['loss']:.4f}")
     print(f"Test accuracy: {results['accuracy']:.4f}")
     print(f"Test macro F1: {results['macro_f1']:.4f}")
     print(f"Test weighted F1: {results['weighted_f1']:.4f}")
+    print("Actual class distribution:", prediction_diagnostics["actual_class_distribution"])
+    print("Predicted class distribution:", prediction_diagnostics["predicted_class_distribution"])
+    print("Confusion matrix:")
+    for row in prediction_diagnostics["confusion_matrix"]:
+        print(row)
     print("\nClassification Report:\n" + format_classification_report(all_labels, all_preds, label_names=bundle.label_names))
     print(f"Run ID: {run_id}")
     print(f"Saved predictions: {output_path}")
+    print(f"Saved diagnostics: {diagnostics_path}")
+    print(f"Saved confusion matrix: {confusion_csv_path}")
 
 
 if __name__ == "__main__":
