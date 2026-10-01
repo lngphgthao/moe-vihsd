@@ -1,10 +1,10 @@
-# Stage B: Shared path only control (no routed experts, shared FFN only)
-base_config: ../vihsd.yaml
+# Stage B: PhoBERT-MoE with shared expert + routed experts
+base_config: ../../vihsd.yaml
 
 model:
   architecture: transformer_moe
   moe_layers: [8, 9, 10, 11]
-  num_experts: 0
+  num_experts: 4
   top_k: 1
   expert_type: gelu
   upcycle: true
@@ -14,4 +14,4 @@ training:
   loss_type: cross_entropy
 
 routing:
-  load_balance_loss_factor: 0.0
+  load_balance_loss_factor: 0.01

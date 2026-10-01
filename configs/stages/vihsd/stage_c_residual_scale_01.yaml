@@ -1,5 +1,5 @@
-# Stage C: Shared expert + 4 routed experts with learnable residual scale (init 1.0)
-base_config: ../vihsd.yaml
+# Stage C: Shared expert + 4 routed experts with learnable residual scale (init 0.1)
+base_config: ../../vihsd.yaml
 
 model:
   architecture: transformer_moe
@@ -10,7 +10,7 @@ model:
   upcycle: true
   shared_expert: true
   learnable_residual_scale: true
-  residual_scale_init: 1.0
+  residual_scale_init: 0.1
 
 training:
   loss_type: cross_entropy

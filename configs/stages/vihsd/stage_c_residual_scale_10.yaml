@@ -1,14 +1,16 @@
-# Stage C: Shared MoE placed on layers 10 and 11 only
-base_config: ../vihsd.yaml
+# Stage C: Shared expert + 4 routed experts with learnable residual scale (init 1.0)
+base_config: ../../vihsd.yaml
 
 model:
   architecture: transformer_moe
-  moe_layers: [10, 11]
+  moe_layers: [8, 9, 10, 11]
   num_experts: 4
   top_k: 1
   expert_type: gelu
   upcycle: true
   shared_expert: true
+  learnable_residual_scale: true
+  residual_scale_init: 1.0
 
 training:
   loss_type: cross_entropy

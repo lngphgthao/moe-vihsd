@@ -1,13 +1,14 @@
-# Stage A: Standard PhoBERT-MoE control (4 experts, top-1, layers 8-11, GELU, upcycle)
-base_config: ../vihsd.yaml
+# Stage D: SwiGLU experts (gated SiLU, upcycle=false, hidden_size=2048)
+base_config: ../../vihsd.yaml
 
 model:
   architecture: transformer_moe
   moe_layers: [8, 9, 10, 11]
   num_experts: 4
   top_k: 1
-  expert_type: gelu
-  upcycle: true
+  expert_type: swiglu
+  upcycle: false
+  expert_hidden_size: 2048
   shared_expert: false
 
 training:

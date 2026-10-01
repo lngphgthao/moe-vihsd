@@ -1,6 +1,6 @@
 # Best confirmed ViANLI configuration
 # Architecture: XLM-RoBERTa MoE, Layers [6-11] (Last 6 Layers), 4 Experts, Dynamic Threshold Routing
-base_config: vianli.yaml
+base_config: ../vianli.yaml
 
 seed: 42
 

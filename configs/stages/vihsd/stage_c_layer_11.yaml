@@ -1,5 +1,5 @@
 # Stage C: Shared MoE placed on layer 11 only
-base_config: ../vihsd.yaml
+base_config: ../../vihsd.yaml
 
 model:
   architecture: transformer_moe

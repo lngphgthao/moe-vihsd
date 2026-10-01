@@ -1,7 +1,7 @@
 # Reproducible dense baselines for ViANLI.
 # Change model.pretrained_model_name to compare another compatible encoder.
 # Examples: vinai/phobert-base, xlm-roberta-base, bert-base-multilingual-cased
-base_config: vianli.yaml
+base_config: ../vianli.yaml
 
 dataset:
   # Group configs select the segmented path for PhoBERT runs.

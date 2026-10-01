@@ -1,14 +1,13 @@
-# Stage C: Shared expert + 8 narrow routed experts (hidden size 1536) with top-2 routing
-base_config: ../vihsd.yaml
+# Stage C: Shared expert + 4 routed experts with top-2 routing
+base_config: ../../vihsd.yaml
 
 model:
   architecture: transformer_moe
   moe_layers: [8, 9, 10, 11]
-  num_experts: 8
-  expert_hidden_size: 1536
+  num_experts: 4
   top_k: 2
   expert_type: gelu
-  upcycle: false
+  upcycle: true
   shared_expert: true
 
 training:

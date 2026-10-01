@@ -1,9 +1,9 @@
-# Stage B: PhoBERT-MoE with shared expert + routed experts
-base_config: ../vihsd.yaml
+# Stage C: Shared MoE placed on layers 10 and 11 only
+base_config: ../../vihsd.yaml
 
 model:
   architecture: transformer_moe
-  moe_layers: [8, 9, 10, 11]
+  moe_layers: [10, 11]
   num_experts: 4
   top_k: 1
   expert_type: gelu

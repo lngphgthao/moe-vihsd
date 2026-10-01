@@ -3,7 +3,7 @@
 # Val Macro F1: 68.11 ± 1.31 (3 seeds 42/43/44)
 # Test Macro F1: 65.12 ± 0.23 (peak: 65.39% at seed 42)
 # Stage F confirmed finalist — use this config as the starting point for new datasets.
-base_config: vihsd.yaml
+base_config: ../vihsd.yaml
 
 seed: 42
 

@@ -1,5 +1,5 @@
-# Stage C: Shared expert + 4 routed experts with learnable residual scale (init 0.1)
-base_config: ../vihsd.yaml
+# Stage A: Standard PhoBERT-MoE control (4 experts, top-1, layers 8-11, GELU, upcycle)
+base_config: ../../vihsd.yaml
 
 model:
   architecture: transformer_moe
@@ -8,9 +8,7 @@ model:
   top_k: 1
   expert_type: gelu
   upcycle: true
-  shared_expert: true
-  learnable_residual_scale: true
-  residual_scale_init: 0.1
+  shared_expert: false
 
 training:
   loss_type: cross_entropy

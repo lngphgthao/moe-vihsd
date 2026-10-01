@@ -1,5 +1,5 @@
 # Stage D: GEGLU experts (gated GELU, upcycle=false, hidden_size=2048)
-base_config: ../vihsd.yaml
+base_config: ../../vihsd.yaml
 
 model:
   architecture: transformer_moe

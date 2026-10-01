@@ -37,10 +37,8 @@ data/processed/
 !data/vianli_segmented/**
 
 # Training outputs and local experiment artifacts
-results/*
-!results/README.md
+results/
 checkpoints/*
-!checkpoints/README.md
 runs/
 wandb/
 tensorboard/
@@ -62,3 +60,4 @@ logs/
 # Local agent planning and session documentation
 /AGENTS.md
 /docs/
+.agent/

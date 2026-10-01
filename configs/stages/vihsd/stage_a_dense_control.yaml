@@ -1,5 +1,5 @@
 # Stage A: Dense PhoBERT baseline (mean pooling, cross-entropy)
-base_config: ../vihsd.yaml
+base_config: ../../vihsd.yaml
 
 model:
   architecture: dense_phobert

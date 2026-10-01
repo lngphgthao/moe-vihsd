@@ -1,7 +1,7 @@
 # Classifier-MoE baseline configuration
 # Keeps the Transformer encoder completely dense and routes pooled representations
 # through a Mixture-of-Experts classification head.
-base_config: vihsd.yaml
+base_config: ../vihsd.yaml
 
 model:
   architecture: classifier_moe

@@ -195,7 +195,7 @@ and optional W&B logging.
 
 ```bash
 python scripts/run_group.py \
-  --group-config configs/groups/vianli_dense_backbones.yaml \
+  --group-config configs/groups/vianli_stage1_dense_backbones.yaml \
   --no-smoke-test
 ```
 

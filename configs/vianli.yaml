@@ -11,7 +11,7 @@
 #
 #   python train.py --config configs/vianli.yaml --no-smoke-test \
 #     --run-id vianli-moe-all12-s42 --set seed=42
-base_config: vihsd_best.yaml
+base_config: finalists/vihsd_best.yaml
 
 seed: 42
 
