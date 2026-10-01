@@ -65,6 +65,8 @@ Available architecture names:
 - `phobert_moe` — compatibility alias for older MoE configurations
 - `dense_transformer` — generic dense classifier for any compatible Hugging Face encoder
 - `dense_phobert` — compatibility alias for `dense_transformer`
+- `classifier_moe` — dense encoder followed by a pooled-representation MoE head
+- `hybrid_moe` — Transformer-MoE encoder followed by a Classifier-MoE head
 
 Select an architecture in the YAML file or override it for one run. No code changes are required.
 

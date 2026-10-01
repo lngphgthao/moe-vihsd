@@ -3,11 +3,16 @@
 base_config: ../vianli.yaml
 
 model:
-  architecture: transformer_moe
+  architecture: classifier_moe
+  pretrained_model_name: xlm-roberta-base
+
+dataset:
+  name: uitnlp/ViANLI
+  tokenizer: xlm-roberta-base
 
 diagnostics:
   collect_model_diagnostics: true
   tiny_overfit:
     enabled: true
     samples: 150
-    epochs: 75
+    epochs: 50

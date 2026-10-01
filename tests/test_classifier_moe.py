@@ -269,6 +269,8 @@ class TestClassifierMoE(unittest.TestCase):
             from src.models.factory import build_model
             factory_model = build_model(config, vocab_size=100, num_labels=3)
             self.assertIsInstance(factory_model, ClassifierMoEClassifier)
+            self.assertTrue(hasattr(factory_model, "classifier_moe"))
+            self.assertFalse(hasattr(factory_model, "moe_layers"))
 
         finally:
             cm_module.load_backbone = orig_load

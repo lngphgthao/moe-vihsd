@@ -65,6 +65,7 @@ Use these canonical names in new files:
 | `transformer_moe`   | Selected internal Transformer FFNs replaced by token-level MoE     |
 | `dynamic_moe`       | Dense encoder with sequence-level dynamic-threshold routing        |
 | `classifier_moe`    | Dense encoder with a pooled-representation MoE classification head |
+| `hybrid_moe`        | Transformer-MoE encoder followed by a Classifier-MoE head          |
 
 Compatibility aliases retained for older runs:
 
@@ -127,6 +128,8 @@ routing:
 - For `transformer_moe`, specify `moe_layers`, `num_experts`, `top_k`, and routing settings.
 - For `classifier_moe`, specify `num_experts`, `top_k`, `expert_hidden_dim`, and whether shared
   or residual paths are enabled.
+- For `hybrid_moe`, use nested `model.transformer_moe` and `model.classifier_moe` sections so
+  encoder and head routing settings cannot be confused.
 
 ### Training and evaluation
 

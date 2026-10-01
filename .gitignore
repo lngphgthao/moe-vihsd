@@ -27,6 +27,8 @@ Thumbs.db
 data/raw/
 data/processed/
 *.csv
+experiments/**
+!experiments/experiment_tracker.csv
 *.jsonl
 *.arrow
 *.parquet

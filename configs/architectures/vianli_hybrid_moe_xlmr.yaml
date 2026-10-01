@@ -1,0 +1,40 @@
+# First Hybrid-MoE experiment for ViANLI.
+# XLM-R -> Transformer-MoE in last 6 layers -> Classifier-MoE head.
+base_config: ../vianli.yaml
+
+model:
+  architecture: hybrid_moe
+  pretrained_model_name: xlm-roberta-base
+  pooling: cls
+  transformer_moe:
+    moe_layers: [6, 7, 8, 9, 10, 11]
+    num_experts: 6
+    routing_method: dynamic_threshold
+    dynamic_static_threshold: 0.1
+    dynamic_threshold_scale: 0.1
+    dynamic_threshold_temperature: 0.02
+    top_k: 1
+    upcycle: true
+    expert_type: gelu
+    expert_init_noise: 0.0
+    learnable_residual_scale: false
+    residual_scale_init: 1.0
+  classifier_moe:
+    num_experts: 4
+    top_k: 2
+    expert_hidden_dim: 512
+    dropout: 0.1
+    load_balance_loss_coef: 0.01
+    shared_expert: false
+    use_residual: false
+    routing_type: top_k
+    activation: gelu
+
+routing:
+  load_balance_loss_factor: 0.01
+  dynamic_loss_factor: 0.001
+
+logging:
+  use_wandb: true
+  project: moe-vianli
+  run_name: vianli-hybrid-moe-xlmr-last6-dynamic-e6-head-e4-top2

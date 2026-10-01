@@ -45,6 +45,30 @@ def collect_model_diagnostics(model, loader, device, label_names: list[str]) -> 
                 top_indices = info.get("top_indices")
                 if route_probabilities is None or top_indices is None or route_probabilities.shape[-1] == 0:
                     continue
+                if route_probabilities.dim() == 2 and route_probabilities.shape[0] == labels.shape[0]:
+                    for class_id in labels.unique().tolist():
+                        class_mask = labels == class_id
+                        class_probabilities = route_probabilities[class_mask].detach().cpu()
+                        if class_probabilities.numel() == 0:
+                            continue
+                        record = routing[layer_name][class_id]
+                        probability_sum = class_probabilities.sum(dim=0)
+                        class_indices = top_indices[class_mask].detach().cpu()
+                        assignment_counts = torch.bincount(
+                            class_indices.reshape(-1), minlength=route_probabilities.shape[-1]
+                        )
+                        record["probability_sum"] = (
+                            probability_sum
+                            if record["probability_sum"] is None
+                            else record["probability_sum"] + probability_sum
+                        )
+                        record["assignment_counts"] = (
+                            assignment_counts
+                            if record["assignment_counts"] is None
+                            else record["assignment_counts"] + assignment_counts
+                        )
+                        record["token_count"] += int(class_probabilities.shape[0])
+                    continue
                 route_probabilities = route_probabilities.reshape(
                     labels.shape[0], attention_mask.shape[1], -1
                 )

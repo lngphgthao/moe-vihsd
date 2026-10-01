@@ -8,6 +8,7 @@ from src.models.classifier_moe import (
 from src.models.dense import DenseTransformerClassifier
 from src.models.dynamic_moe import DynamicMoEClassifier
 from src.models.factory import build_model, validate_model_config
+from src.models.hybrid_moe import HybridMoEClassifier
 from src.models.moe.layer import TransformerMoEClassifier
 
 __all__ = [
@@ -17,6 +18,7 @@ __all__ = [
     "DenseTransformerClassifier",
     "DynamicMoEClassifier",
     "TransformerMoEClassifier",
+    "HybridMoEClassifier",
     "build_model",
     "validate_model_config",
 ]

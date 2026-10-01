@@ -1,0 +1,51 @@
+experiment_id,status,verification,dataset,backbone,architecture,variant,moe_layers,experts,routing,shared_expert,seed,platform,config_path,val_macro_f1,val_accuracy,val_weighted_f1,val_loss,test_macro_f1,test_accuracy,test_weighted_f1,notes
+VIANLI-DENSE-XLMR-S42,completed,unverified,ViANLI,xlm-roberta-base,dense_transformer,baseline,none,NA,none,false,42,NA,NA,45.82,46.30,45.82,1.43,NA,NA,NA,Source ID 1
+VIANLI-DENSE-XLMR-S43,completed,unverified,ViANLI,xlm-roberta-base,dense_transformer,baseline,none,NA,none,false,43,NA,NA,43.92,45.10,43.93,1.45,NA,NA,NA,Source ID 1
+VIANLI-DENSE-XLMR-S44,completed,unverified,ViANLI,xlm-roberta-base,dense_transformer,baseline,none,NA,none,false,44,NA,NA,41.82,44.90,41.83,1.07,NA,NA,NA,Source ID 1
+VIANLI-DENSE-PHOBERT-S42,completed,unverified,ViANLI,vinai/phobert-base,dense_transformer,baseline,none,NA,none,false,42,NA,NA,45.78,46.40,45.79,1.09,NA,NA,NA,Source ID 2
+VIANLI-DENSE-PHOBERT-S43,completed,unverified,ViANLI,vinai/phobert-base,dense_transformer,baseline,none,NA,none,false,43,NA,NA,46.29,46.90,46.30,1.07,NA,NA,NA,Source ID 2
+VIANLI-DENSE-PHOBERT-S44,completed,unverified,ViANLI,vinai/phobert-base,dense_transformer,baseline,none,NA,none,false,44,NA,NA,45.16,46.10,45.17,1.30,NA,NA,NA,Source ID 2
+VIANLI-DENSE-MBERT-S42,completed,unverified,ViANLI,bert-base-multilingual-cased,dense_transformer,baseline,none,NA,none,false,42,NA,NA,45.00,44.50,44.51,1.80,NA,NA,NA,Source ID 3
+VIANLI-DENSE-MBERT-S43,completed,unverified,ViANLI,bert-base-multilingual-cased,dense_transformer,baseline,none,NA,none,false,43,NA,NA,42.40,44.40,42.41,1.07,NA,NA,NA,Source ID 3
+VIANLI-DENSE-MBERT-S44,completed,unverified,ViANLI,bert-base-multilingual-cased,dense_transformer,baseline,none,NA,none,false,44,NA,NA,40.61,44.40,40.62,1.07,NA,NA,NA,Source ID 3
+VIANLI-PLACE-LAST4-S42,completed,unverified,ViANLI,xlm-roberta-base,transformer_moe,placement_last4,"[8,9,10,11]",4,top-1,false,42,Colab,NA,39.96,39.60,39.97,1.06,NA,NA,NA,Source ID 4
+VIANLI-PLACE-LAST6-S42,completed,unverified,ViANLI,xlm-roberta-base,transformer_moe,placement_last6,"[6,7,8,9,10,11]",4,top-1,false,42,Kaggle,NA,41.27,42.50,41.28,1.08,NA,NA,NA,Source ID 5
+VIANLI-PLACE-ALT-S42,completed,unverified,ViANLI,xlm-roberta-base,transformer_moe,placement_alternating,"[1,3,5,7,9,11]",4,top-1,false,42,Kaggle,NA,41.17,41.10,41.18,1.10,NA,NA,NA,Source ID 6
+VIANLI-PLACE-ALL-S42,completed,unverified,ViANLI,xlm-roberta-base,transformer_moe,placement_all,all,4,top-1,false,42,Colab,NA,41.09,42.30,41.09,1.06,NA,NA,NA,Source ID 7
+VIANLI-ROUTE-E2-T1-S42,completed,unverified,ViANLI,xlm-roberta-base,transformer_moe,experts_routing,"[6,7,8,9,10,11]",2,top-1,false,42,NA,NA,41.60,42.00,41.61,1.09,NA,NA,NA,Single seed
+VIANLI-ROUTE-E2-T2-S42,completed,unverified,ViANLI,xlm-roberta-base,transformer_moe,experts_routing,"[6,7,8,9,10,11]",2,top-2,false,42,NA,NA,43.98,43.90,43.99,1.25,NA,NA,NA,Single seed
+VIANLI-ROUTE-E2-DYNAMIC-S42,completed,unverified,ViANLI,xlm-roberta-base,transformer_moe,experts_routing,"[6,7,8,9,10,11]",2,dynamic,false,42,NA,NA,43.70,43.60,43.70,1.18,NA,NA,NA,Single seed
+VIANLI-ROUTE-E4-T1-S42,completed,unverified,ViANLI,xlm-roberta-base,transformer_moe,experts_routing,"[6,7,8,9,10,11]",4,top-1,false,42,NA,NA,41.27,42.50,41.28,1.08,NA,NA,NA,Source ID 5
+VIANLI-ROUTE-E4-T2-S42,completed,unverified,ViANLI,xlm-roberta-base,transformer_moe,experts_routing,"[6,7,8,9,10,11]",4,top-2,false,42,NA,NA,43.21,43.20,43.21,1.21,NA,NA,NA,Single seed
+VIANLI-ROUTE-E4-T4-S42,completed,unverified,ViANLI,xlm-roberta-base,transformer_moe,experts_routing,"[6,7,8,9,10,11]",4,top-4,false,42,NA,NA,40.36,40.90,40.38,1.12,NA,NA,NA,Single seed
+VIANLI-ROUTE-E4-DYNAMIC-S42,completed,unverified,ViANLI,xlm-roberta-base,transformer_moe,experts_routing,"[6,7,8,9,10,11]",4,dynamic,false,42,NA,NA,44.48,45.80,44.49,1.19,NA,NA,NA,Single seed
+VIANLI-ROUTE-E6-T1-S42,completed,unverified,ViANLI,xlm-roberta-base,transformer_moe,experts_routing,"[6,7,8,9,10,11]",6,top-1,false,42,NA,NA,37.98,43.00,37.99,1.09,NA,NA,NA,Single seed
+VIANLI-ROUTE-E6-T2-S42,completed,unverified,ViANLI,xlm-roberta-base,transformer_moe,experts_routing,"[6,7,8,9,10,11]",6,top-2,false,42,NA,NA,43.04,43.40,43.05,1.05,NA,NA,NA,Single seed
+VIANLI-ROUTE-E6-T4-S42,completed,unverified,ViANLI,xlm-roberta-base,transformer_moe,experts_routing,"[6,7,8,9,10,11]",6,top-4,false,42,NA,NA,44.20,44.40,44.20,1.35,NA,NA,NA,Single seed
+VIANLI-ROUTE-E6-DYNAMIC-S42,completed,unverified,ViANLI,xlm-roberta-base,transformer_moe,experts_routing,"[6,7,8,9,10,11]",6,dynamic,false,42,NA,NA,45.41,45.20,45.41,1.18,NA,NA,NA,Single seed
+VIANLI-ROUTE-E8-T1-S42,completed,unverified,ViANLI,xlm-roberta-base,transformer_moe,experts_routing,"[6,7,8,9,10,11]",8,top-1,false,42,NA,NA,36.84,43.20,36.86,1.06,NA,NA,NA,Single seed
+VIANLI-ROUTE-E8-T2-S42,completed,unverified,ViANLI,xlm-roberta-base,transformer_moe,experts_routing,"[6,7,8,9,10,11]",8,top-2,false,42,NA,NA,44.44,44.20,44.45,1.05,NA,NA,NA,Single seed
+VIANLI-ROUTE-E8-T4-S42,completed,unverified,ViANLI,xlm-roberta-base,transformer_moe,experts_routing,"[6,7,8,9,10,11]",8,top-4,false,42,NA,NA,43.72,45.00,43.73,1.08,NA,NA,NA,Single seed
+VIANLI-ROUTE-E8-DYNAMIC-S42,completed,unverified,ViANLI,xlm-roberta-base,transformer_moe,experts_routing,"[6,7,8,9,10,11]",8,dynamic,false,42,NA,NA,41.61,42.60,41.62,1.17,NA,NA,NA,Single seed
+VIANLI-SHARED-E4-DYNAMIC-S42,completed,unverified,ViANLI,xlm-roberta-base,transformer_moe,shared_expert,"[6,7,8,9,10,11]",4,dynamic,true,42,NA,NA,38.27,45.20,38.29,1.04,NA,NA,NA,Single seed
+VIANLI-SHARED-E8-T2-S42,completed,unverified,ViANLI,xlm-roberta-base,transformer_moe,shared_expert,"[6,7,8,9,10,11]",8,top-2,true,42,NA,NA,37.71,41.70,37.72,1.07,NA,NA,NA,Single seed
+VIANLI-CROSS-XLMR-ALL-E4-T2-S42,completed,unverified,ViANLI,xlm-roberta-base,transformer_moe,cross_backbone,all,4,top-2,false,42,NA,NA,45.27,45.50,45.27,1.14,NA,NA,NA,Single seed
+VIANLI-CROSS-PHOBERT-LAST6-E6-T2-S42,completed,unverified,ViANLI,vinai/phobert-base,transformer_moe,cross_backbone,"[6,7,8,9,10,11]",6,top-2,false,42,NA,NA,44.69,45.00,44.70,1.34,NA,NA,NA,Single seed
+VIANLI-CROSS-PHOBERT-LAST6-E4-T2-S42,completed,unverified,ViANLI,vinai/phobert-base,transformer_moe,cross_backbone,"[6,7,8,9,10,11]",4,top-2,false,42,NA,NA,45.46,46.00,45.47,1.08,NA,NA,NA,Single seed
+VIANLI-CROSS-PHOBERT-ALL-E6-T2-S42,completed,unverified,ViANLI,vinai/phobert-base,transformer_moe,cross_backbone,all,6,top-2,false,42,NA,NA,43.34,43.90,43.35,1.45,NA,NA,NA,Single seed
+VIANLI-CROSS-PHOBERT-LAST6-E6-DYNAMIC-S42,completed,unverified,ViANLI,vinai/phobert-base,transformer_moe,cross_backbone,"[6,7,8,9,10,11]",6,dynamic,false,42,NA,NA,45.05,45.20,45.06,1.62,NA,NA,NA,Single seed
+VIANLI-CLASSIFIER-MOE-XLMR-E4-T2-S42,completed,unverified,ViANLI,xlm-roberta-base,classifier_moe,baseline,none,4,top-2,false,42,NA,NA,34.00,42.80,34.02,1.08,NA,NA,NA,Single seed; collapse investigation target
+VIHSD-DENSE-CLS-S42,completed,unverified,ViHSD,vinai/phobert-base,dense_transformer,baseline,none,NA,none,false,42,NA,NA,67.03,85.93,86.16,NA,65.16,NA,NA,Historical reported result
+VIHSD-ROUTE-E4-T2-S42,completed,unverified,ViHSD,vinai/phobert-base,transformer_moe,experts_routing,"[8,9,10,11]",4,top-2,false,42,NA,NA,67.20,87.80,86.84,NA,63.38,NA,NA,Historical reported result
+VIHSD-ROUTE-E8-T2-RES1-S42,completed,unverified,ViHSD,vinai/phobert-base,transformer_moe,experts_routing,all,8,top-2,false,42,NA,NA,68.22,86.71,86.82,NA,64.39,NA,NA,Historical reported result
+VIHSD-ROUTE-E6-T2-WCE-S42,completed,unverified,ViHSD,vinai/phobert-base,transformer_moe,experts_routing,"[8,9,10,11]",6,top-2,false,42,NA,NA,66.50,87.84,86.77,NA,64.47,NA,NA,Historical reported result
+VIHSD-SHARED-E4-T2-S42,completed,unverified,ViHSD,vinai/phobert-base,transformer_moe,shared_expert,"[8,9,10,11]",4,top-2,true,42,NA,NA,69.41,87.61,87.31,NA,65.03,NA,NA,Historical reported result
+VIHSD-SHARED-E4-T1-RES01-S42,planned,unverified,ViHSD,vinai/phobert-base,transformer_moe,shared_expert,"[8,9,10,11]",4,top-1,true,42,NA,NA,NA,NA,NA,NA,NA,NA,NA,Planned or unreported in source table
+VIHSD-SHARED-E4-T1-RES10-S42,completed,unverified,ViHSD,vinai/phobert-base,transformer_moe,shared_expert,"[8,9,10,11]",4,top-1,true,42,NA,NA,64.95,87.01,86.24,NA,64.18,NA,NA,Historical reported result
+VIHSD-PLACE-LAST4-T2-S42,completed,unverified,ViHSD,vinai/phobert-base,transformer_moe,placement_last4,"[8,9,10,11]",4,top-2,false,42,NA,NA,67.72,87.54,87.13,NA,64.69,NA,NA,Historical reported result
+VIHSD-PLACE-LAST4-T2-LB0-S42,completed,unverified,ViHSD,vinai/phobert-base,transformer_moe,load_balance_ablation,"[8,9,10,11]",4,top-2,false,42,NA,NA,67.51,87.61,86.94,NA,64.05,NA,NA,Historical reported result
+VIHSD-PLACE-LAYER11-T2-S42,completed,unverified,ViHSD,vinai/phobert-base,transformer_moe,placement_layer11,[11],4,top-2,false,42,NA,NA,68.09,86.83,86.77,NA,64.69,NA,NA,Historical reported result
+VIHSD-PLACE-ALL-T2-S42,completed,unverified,ViHSD,vinai/phobert-base,transformer_moe,placement_all,all,4,top-2,false,42,NA,NA,69.50,87.35,87.14,NA,65.39,NA,NA,Historical reported result
+VIHSD-PLACE-ALL-SHARED-E4-T2-S42,completed,unverified,ViHSD,vinai/phobert-base,transformer_moe,placement_all_shared,all,4,top-2,true,42,NA,NA,48.60,85.07,81.21,NA,47.30,NA,NA,Historical reported result; possible anomaly
+VIHSD-PLACE-ALL-E8-T2-S42,completed,unverified,ViHSD,vinai/phobert-base,transformer_moe,placement_all,all,8,top-2,false,42,NA,NA,65.36,87.09,86.27,NA,62.51,NA,NA,Historical reported result
+VIHSD-PLACE-ALL-NOISE01-S42,completed,unverified,ViHSD,vinai/phobert-base,transformer_moe,initialization_noise,all,4,top-2,false,42,NA,NA,66.79,86.90,86.54,NA,62.76,NA,NA,Historical reported result

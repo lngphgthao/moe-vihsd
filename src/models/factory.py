@@ -8,6 +8,7 @@ from src.models.moe.layer import TransformerMoEClassifier
 from src.models.dense import DenseTransformerClassifier
 from src.models.dynamic_moe import DynamicMoEClassifier
 from src.models.classifier_moe import ClassifierMoEClassifier
+from src.models.hybrid_moe import HybridMoEClassifier
 
 MODEL_REGISTRY: dict[str, Any] = {
     "transformer_moe": TransformerMoEClassifier,
@@ -19,6 +20,7 @@ MODEL_REGISTRY: dict[str, Any] = {
     "dense_phobert": DenseTransformerClassifier,
     "classifier_moe": ClassifierMoEClassifier,
     "classifier_moe_phobert": ClassifierMoEClassifier,
+    "hybrid_moe": HybridMoEClassifier,
 }
 
 

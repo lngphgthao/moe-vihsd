@@ -178,6 +178,46 @@ def collect_routing_diagnostics(model) -> dict:
     """Extract routing entropy and expert load fractions from the last forward pass."""
     diagnostics = {}
     inner = getattr(model, "module", model)
+    if hasattr(inner, "classifier_moe") and hasattr(inner, "moe_layers"):
+        classifier_info = getattr(inner.classifier_moe, "last_routing_info", {})
+        classifier_probs = classifier_info.get("probabilities")
+        classifier_indices = classifier_info.get("top_indices")
+        if classifier_probs is not None and classifier_indices is not None:
+            classifier_entropy = -(
+                classifier_probs * torch.log(classifier_probs.clamp(min=1e-9))
+            ).sum(dim=-1).mean().item()
+            classifier_counts = torch.bincount(
+                classifier_indices.reshape(-1), minlength=classifier_probs.shape[-1]
+            ).float()
+            diagnostics["classifier_moe"] = {
+                "routing_entropy": classifier_entropy,
+                "expert_load_fractions": (
+                    classifier_counts / classifier_counts.sum().clamp_min(1.0)
+                ).tolist(),
+            }
+        for layer_idx_str, moe_layer in inner.moe_layers.items():
+            info = getattr(moe_layer, "last_routing_info", {})
+            probs = info.get("probabilities")
+            if probs is None or probs.shape[-1] == 0:
+                continue
+            entropy = -(probs * torch.log(probs.clamp(min=1e-9))).sum(dim=-1).mean().item()
+            selected_mask = info.get("selected_mask")
+            if selected_mask is not None:
+                diagnostics[f"transformer_moe_layer_{layer_idx_str}"] = {
+                    "routing_entropy": entropy,
+                    "expert_load_fractions": selected_mask.float().mean(dim=0).tolist(),
+                    "mean_active_experts": selected_mask.float().sum(dim=-1).mean().item(),
+                }
+                continue
+            indices = info.get("top_indices")
+            if indices is None:
+                continue
+            counts = torch.bincount(indices.reshape(-1), minlength=probs.shape[-1]).float()
+            diagnostics[f"transformer_moe_layer_{layer_idx_str}"] = {
+                "routing_entropy": entropy,
+                "expert_load_fractions": (counts / counts.sum().clamp_min(1.0)).tolist(),
+            }
+        return diagnostics
     dynamic_info = getattr(inner, "last_routing_info", {})
     if dynamic_info and "selected" in dynamic_info:
         probs = dynamic_info["probabilities"]
@@ -294,7 +334,7 @@ def main() -> None:
         print(f"  moe_layers: {model_config.get('moe_layers', [8, 9, 10, 11])}")
         print(f"  freeze_attention: {model_config.get('freeze_attention', False)}")
         print(f"  upcycle: {model_config.get('upcycle', True)}")
-    if model_config["architecture"] in {"classifier_moe", "classifier_moe_phobert"}:
+    if model_config["architecture"] in {"classifier_moe", "classifier_moe_phobert", "hybrid_moe"}:
         print(f"  pretrained_model_name: {model_config.get('pretrained_model_name')}")
         print(f"  num_experts: {model_config.get('num_experts', 4)}")
         print(f"  top_k: {model_config.get('top_k', 2)}")
@@ -423,6 +463,7 @@ def main() -> None:
         or hasattr(model, "classifier_moe")
         or hasattr(getattr(model, "module", model), "classifier_moe")
         or model_config["architecture"] in {"dynamic_moe", "classifier_moe", "classifier_moe_phobert"}
+        or model_config["architecture"] == "hybrid_moe"
     ):
         model.eval()
         with torch.no_grad():
