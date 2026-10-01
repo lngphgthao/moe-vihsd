@@ -103,8 +103,8 @@ class TestHybridMoE(unittest.TestCase):
                 {
                     "architecture": "hybrid_moe",
                     "pretrained_model_name": "dummy",
-                    "hybrid_head_type": "dynamic_moe",
-                    "dynamic_moe": {
+                    "hybrid_head_type": "nlimoe",
+                    "nlimoe": {
                         "num_experts": 4,
                         "routing_type": "top_k",
                         "top_k": 2,
@@ -113,7 +113,7 @@ class TestHybridMoE(unittest.TestCase):
                 vocab_size=100,
                 num_labels=3,
             )
-            self.assertTrue(hasattr(model, "dynamic_moe"))
+            self.assertTrue(hasattr(model, "nlimoe"))
             self.assertEqual(model.num_classifier_experts, 4)
             self.assertEqual(model.classifier_top_k, 2)
         finally:

@@ -12,8 +12,8 @@
 base_config: vianli_hybrid_moe_xlmr.yaml
 
 model:
-  hybrid_head_type: dynamic_moe
-  dynamic_moe:
+  hybrid_head_type: nlimoe
+  nlimoe:
     num_experts: 7
     routing_type: dynamic
     static_threshold: 0.1

@@ -63,7 +63,7 @@ Use these canonical names in new files:
 | ------------------- | ------------------------------------------------------------------ |
 | `dense_transformer` | Dense Hugging Face encoder and classifier                          |
 | `transformer_moe`   | Selected internal Transformer FFNs replaced by token-level MoE     |
-| `dynamic_moe`       | Dense encoder with sequence-level dynamic-threshold routing        |
+| `nlimoe`            | Dense encoder with sequence-level dynamic-threshold routing        |
 | `classifier_moe`    | Dense encoder with a pooled-representation MoE classification head |
 | `hybrid_moe`        | Transformer-MoE encoder followed by a Classifier-MoE head          |
 
@@ -130,7 +130,7 @@ routing:
   or residual paths are enabled.
 - For `hybrid_moe`, use nested `model.transformer_moe` and `model.classifier_moe` sections so
   encoder and head routing settings cannot be confused. Set `model.hybrid_head_type` to
-  `dynamic_moe` and use `model.dynamic_moe` to compare the reusable dynamic/top-k head.
+  `nlimoe` and use `model.nlimoe` to compare the reusable dynamic/top-k head.
 
 ### Training and evaluation
 

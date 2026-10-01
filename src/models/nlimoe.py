@@ -27,19 +27,19 @@ import torch.nn.functional as F
 from src.models.backbone import load_backbone
 
 
-class DynamicMoEClassifier(nn.Module):
+class NLIMoEClassifier(nn.Module):
     """Mean-pool a shared encoder, then route each example by a learned threshold or top-k."""
 
     def __init__(self, vocab_size: int, num_labels: int, config: dict) -> None:
         super().__init__()
         self.model_name = config.get("pretrained_model_name")
         if not self.model_name:
-            raise ValueError("model.pretrained_model_name is required for dynamic_moe")
+            raise ValueError("model.pretrained_model_name is required for nlimoe")
         self.backbone = load_backbone(self.model_name)
         hidden_size = int(self.backbone.config.hidden_size)
         self.num_experts = int(config.get("dynamic_num_experts", 7))
         if self.num_experts < 1:
-            raise ValueError("model.dynamic_num_experts must be at least 1 for dynamic_moe")
+            raise ValueError("model.dynamic_num_experts must be at least 1 for nlimoe")
 
         # --- routing type ---
         self.routing_type = str(config.get("routing_type", "dynamic")).lower()

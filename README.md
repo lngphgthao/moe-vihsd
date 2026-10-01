@@ -58,7 +58,7 @@ The architectures are selected through the shared model factory in [src/models/f
 
 Available architecture names:
 
-- `dynamic_moe`: shared PhoBERT encoder with mean pooling and per-example dynamic-threshold routing (NLIMoE-style).
+- `nlimoe`: shared PhoBERT encoder with mean pooling and per-example dynamic-threshold routing (NLIMoE-style).
 - `transformer_moe` with `model.routing_method=dynamic_threshold`: token-level dynamic-threshold routing inside the selected transformer FFNs. `top_k` remains the default.
 
 - `transformer_moe` — true token-level MoE Transformer: loads a compatible BERT/RoBERTa-family encoder and replaces selected internal FFNs with Sparse MoE layers in [src/models/moe/layer.py](src/models/moe/layer.py)
@@ -74,7 +74,7 @@ Example dynamic-routing run (uses validation for checkpoint selection like the o
 
 ```bash
 python train.py --config configs/vihsd.yaml --no-smoke-test \
-  --run-id dynamic-moe-s42 --set model.architecture=dynamic_moe --set seed=42
+  --run-id dynamic-moe-s42 --set model.architecture=nlimoe --set seed=42
 ```
 
 To keep the token-level Transformer MoE and switch only its router:

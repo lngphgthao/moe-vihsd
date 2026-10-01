@@ -35,9 +35,9 @@ model:
   moe_layers: [8, 9, 10, 11] # layers with FFN replaced by token-level MoE
   num_experts: 4
   routing_method: top_k # top_k or dynamic_threshold for transformer_moe
-  dynamic_num_experts: 7 # sequence-level dynamic_moe; NLIMoE paper uses 7
-  dynamic_static_threshold: 0.1 # dynamic_moe or dynamic_threshold routing
-  dynamic_threshold_scale: 0.1 # dynamic_moe or dynamic_threshold routing
+  dynamic_num_experts: 7 # sequence-level nlimoe; NLIMoE paper uses 7
+  dynamic_static_threshold: 0.1 # nlimoe or dynamic_threshold routing
+  dynamic_threshold_scale: 0.1 # nlimoe or dynamic_threshold routing
   dynamic_threshold_temperature: 0.02 # straight-through surrogate temperature
   top_k: 1
   upcycle: true # clone pretrained PhoBERT FFN weights into all experts

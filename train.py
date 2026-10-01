@@ -178,8 +178,8 @@ def collect_routing_diagnostics(model) -> dict:
     """Extract routing entropy and expert load fractions from the last forward pass."""
     diagnostics = {}
     inner = getattr(model, "module", model)
-    if (hasattr(inner, "classifier_moe") or hasattr(inner, "dynamic_moe")) and hasattr(inner, "moe_layers"):
-        head_name = "classifier_moe" if hasattr(inner, "classifier_moe") else "dynamic_moe"
+    if (hasattr(inner, "classifier_moe") or hasattr(inner, "nlimoe")) and hasattr(inner, "moe_layers"):
+        head_name = "classifier_moe" if hasattr(inner, "classifier_moe") else "nlimoe"
         head_module = getattr(inner, head_name)
         classifier_info = getattr(head_module, "last_routing_info", {})
         classifier_probs = classifier_info.get("probabilities")
@@ -225,7 +225,7 @@ def collect_routing_diagnostics(model) -> dict:
         probs = dynamic_info["probabilities"]
         selected = dynamic_info["selected"]
         entropy = -(probs * torch.log(probs.clamp_min(1e-9))).sum(dim=-1).mean().item()
-        diagnostics["dynamic_moe"] = {
+        diagnostics["nlimoe"] = {
             "routing_entropy": entropy,
             "expert_load_fractions": selected.float().mean(dim=0).tolist(),
             "mean_active_experts": selected.float().sum(dim=-1).mean().item(),
@@ -463,10 +463,10 @@ def main() -> None:
         hasattr(model, "moe_layers")
         or hasattr(getattr(model, "module", model), "moe_layers")
         or hasattr(model, "classifier_moe")
-        or hasattr(model, "dynamic_moe")
+        or hasattr(model, "nlimoe")
         or hasattr(getattr(model, "module", model), "classifier_moe")
-        or hasattr(getattr(model, "module", model), "dynamic_moe")
-        or model_config["architecture"] in {"dynamic_moe", "classifier_moe", "classifier_moe_phobert"}
+        or hasattr(getattr(model, "module", model), "nlimoe")
+        or model_config["architecture"] in {"nlimoe", "classifier_moe", "classifier_moe_phobert"}
         or model_config["architecture"] == "hybrid_moe"
     ):
         model.eval()

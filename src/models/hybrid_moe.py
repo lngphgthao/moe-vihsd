@@ -68,22 +68,22 @@ class HybridMoEClassifier(nn.Module):
             )
             self.num_classifier_experts = self.classifier_moe.num_experts
             self.classifier_top_k = self.classifier_moe.top_k
-        elif self.hybrid_head_type == "dynamic_moe":
-            head_config = dict(config.get("dynamic_moe", {}))
+        elif self.hybrid_head_type == "nlimoe":
+            head_config = dict(config.get("nlimoe", {}))
             head_config.setdefault("num_experts", 4)
             head_config.setdefault("top_k", 2)
             head_config.setdefault("routing_type", "top_k")
             head_config.setdefault("expert_hidden_dim", int(self.backbone.config.hidden_size))
             head_config.setdefault("dropout", config.get("dropout", 0.1))
-            self.dynamic_moe = DynamicMoEHead(
+            self.nlimoe = DynamicMoEHead(
                 input_dim=int(self.backbone.config.hidden_size),
                 num_labels=num_labels,
                 config=head_config,
             )
-            self.num_classifier_experts = self.dynamic_moe.num_experts
-            self.classifier_top_k = getattr(self.dynamic_moe, "top_k", None)
+            self.num_classifier_experts = self.nlimoe.num_experts
+            self.classifier_top_k = getattr(self.nlimoe, "top_k", None)
         else:
-            raise ValueError("hybrid_head_type must be 'classifier_moe' or 'dynamic_moe'")
+            raise ValueError("hybrid_head_type must be 'classifier_moe' or 'nlimoe'")
 
         self.freeze_attention = bool(config.get("freeze_attention", False))
         self.freeze_embeddings = bool(config.get("freeze_embeddings", False))
@@ -116,8 +116,8 @@ class HybridMoEClassifier(nn.Module):
             logits, classifier_aux = self.classifier_moe(pooled)
             head_name = "classifier_moe"
         else:
-            logits, classifier_aux = self.dynamic_moe(pooled)
-            head_name = "dynamic_moe"
+            logits, classifier_aux = self.nlimoe(pooled)
+            head_name = "nlimoe"
         transformer_balance_loss = pooled.new_zeros(())
         transformer_dynamic_loss = pooled.new_zeros(())
         transformer_routing: dict[str, dict[str, Any]] = {}
