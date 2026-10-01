@@ -36,9 +36,11 @@ model:
   num_experts: 4
   routing_method: top_k # top_k or dynamic_threshold for transformer_moe
   dynamic_num_experts: 7 # sequence-level nlimoe; NLIMoE paper uses 7
+  dynamic_top_k: 2 # sequence-level nlimoe; NLIMoE paper uses top-2
   dynamic_static_threshold: 0.1 # nlimoe or dynamic_threshold routing
   dynamic_threshold_scale: 0.1 # nlimoe or dynamic_threshold routing
   dynamic_threshold_temperature: 0.02 # straight-through surrogate temperature
+  routing_type: dynamic # dynamic or top_k
   top_k: 1
   upcycle: true # clone pretrained PhoBERT FFN weights into all experts
   shared_expert: false # true = always-active shared expert (Stage B experiments)
