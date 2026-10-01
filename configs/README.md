@@ -129,7 +129,8 @@ routing:
 - For `classifier_moe`, specify `num_experts`, `top_k`, `expert_hidden_dim`, and whether shared
   or residual paths are enabled.
 - For `hybrid_moe`, use nested `model.transformer_moe` and `model.classifier_moe` sections so
-  encoder and head routing settings cannot be confused.
+  encoder and head routing settings cannot be confused. Set `model.hybrid_head_type` to
+  `dynamic_moe` and use `model.dynamic_moe` to compare the reusable dynamic/top-k head.
 
 ### Training and evaluation
 

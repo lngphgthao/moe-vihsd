@@ -1,0 +1,14 @@
+# Optional Hybrid-MoE comparison: dynamic/top-k head after Transformer-MoE.
+base_config: vianli_hybrid_moe_xlmr.yaml
+
+model:
+  hybrid_head_type: dynamic_moe
+  dynamic_moe:
+    num_experts: 4
+    routing_type: top_k
+    top_k: 2
+    expert_hidden_dim: 768
+    dropout: 0.1
+
+logging:
+  run_name: vianli-hybrid-moe-xlmr-last6-dynamic-transformer-head-e4-top2

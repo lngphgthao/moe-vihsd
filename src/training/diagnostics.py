@@ -43,7 +43,12 @@ def collect_model_diagnostics(model, loader, device, label_names: list[str]) -> 
             for layer_name, info in layer_routing.items():
                 route_probabilities = info.get("probabilities")
                 top_indices = info.get("top_indices")
-                if route_probabilities is None or top_indices is None or route_probabilities.shape[-1] == 0:
+                selected_assignments = info.get("selected")
+                if (
+                    route_probabilities is None
+                    or (top_indices is None and selected_assignments is None)
+                    or route_probabilities.shape[-1] == 0
+                ):
                     continue
                 if route_probabilities.dim() == 2 and route_probabilities.shape[0] == labels.shape[0]:
                     for class_id in labels.unique().tolist():
@@ -53,10 +58,13 @@ def collect_model_diagnostics(model, loader, device, label_names: list[str]) -> 
                             continue
                         record = routing[layer_name][class_id]
                         probability_sum = class_probabilities.sum(dim=0)
-                        class_indices = top_indices[class_mask].detach().cpu()
-                        assignment_counts = torch.bincount(
-                            class_indices.reshape(-1), minlength=route_probabilities.shape[-1]
-                        )
+                        if selected_assignments is not None:
+                            assignment_counts = selected_assignments[class_mask].detach().cpu().sum(dim=0).long()
+                        else:
+                            class_indices = top_indices[class_mask].detach().cpu()
+                            assignment_counts = torch.bincount(
+                                class_indices.reshape(-1), minlength=route_probabilities.shape[-1]
+                            )
                         record["probability_sum"] = (
                             probability_sum
                             if record["probability_sum"] is None

@@ -178,8 +178,10 @@ def collect_routing_diagnostics(model) -> dict:
     """Extract routing entropy and expert load fractions from the last forward pass."""
     diagnostics = {}
     inner = getattr(model, "module", model)
-    if hasattr(inner, "classifier_moe") and hasattr(inner, "moe_layers"):
-        classifier_info = getattr(inner.classifier_moe, "last_routing_info", {})
+    if (hasattr(inner, "classifier_moe") or hasattr(inner, "dynamic_moe")) and hasattr(inner, "moe_layers"):
+        head_name = "classifier_moe" if hasattr(inner, "classifier_moe") else "dynamic_moe"
+        head_module = getattr(inner, head_name)
+        classifier_info = getattr(head_module, "last_routing_info", {})
         classifier_probs = classifier_info.get("probabilities")
         classifier_indices = classifier_info.get("top_indices")
         if classifier_probs is not None and classifier_indices is not None:
@@ -189,7 +191,7 @@ def collect_routing_diagnostics(model) -> dict:
             classifier_counts = torch.bincount(
                 classifier_indices.reshape(-1), minlength=classifier_probs.shape[-1]
             ).float()
-            diagnostics["classifier_moe"] = {
+            diagnostics[head_name] = {
                 "routing_entropy": classifier_entropy,
                 "expert_load_fractions": (
                     classifier_counts / classifier_counts.sum().clamp_min(1.0)
@@ -461,7 +463,9 @@ def main() -> None:
         hasattr(model, "moe_layers")
         or hasattr(getattr(model, "module", model), "moe_layers")
         or hasattr(model, "classifier_moe")
+        or hasattr(model, "dynamic_moe")
         or hasattr(getattr(model, "module", model), "classifier_moe")
+        or hasattr(getattr(model, "module", model), "dynamic_moe")
         or model_config["architecture"] in {"dynamic_moe", "classifier_moe", "classifier_moe_phobert"}
         or model_config["architecture"] == "hybrid_moe"
     ):

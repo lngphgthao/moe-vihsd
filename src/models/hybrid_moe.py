@@ -9,6 +9,7 @@ import torch.nn as nn
 
 from src.models.classifier_moe import ClassifierMoEHead
 from src.models.moe.layer import TransformerMoEClassifier
+from src.models.moe.dynamic_head import DynamicMoEHead
 
 
 class HybridMoEClassifier(nn.Module):
@@ -40,31 +41,49 @@ class HybridMoEClassifier(nn.Module):
         self.transformer_routing_method = transformer_config["routing_method"]
         del transformer_branch
 
-        head_config = dict(config.get("classifier_moe", {}))
-        head_config.setdefault("num_experts", 4)
-        head_config.setdefault("top_k", 2)
-        head_config.setdefault("expert_hidden_dim", 512)
-        head_config.setdefault("dropout", config.get("dropout", 0.1))
-        head_config.setdefault("load_balance_loss_coef", 0.01)
-        head_config.setdefault("shared_expert", False)
-        head_config.setdefault("use_residual", False)
-        head_config.setdefault("routing_type", "top_k")
-        head_config.setdefault("activation", "gelu")
-        self.classifier_moe = ClassifierMoEHead(
-            input_dim=int(self.backbone.config.hidden_size),
-            num_labels=num_labels,
-            num_experts=int(head_config["num_experts"]),
-            top_k=int(head_config["top_k"]),
-            expert_hidden_dim=int(head_config["expert_hidden_dim"]),
-            dropout=float(head_config["dropout"]),
-            load_balance_loss_coef=float(head_config["load_balance_loss_coef"]),
-            shared_expert=bool(head_config["shared_expert"]),
-            use_residual=bool(head_config["use_residual"]),
-            routing_type=str(head_config["routing_type"]),
-            activation=str(head_config["activation"]),
-        )
-        self.num_classifier_experts = self.classifier_moe.num_experts
-        self.classifier_top_k = self.classifier_moe.top_k
+        self.hybrid_head_type = str(config.get("hybrid_head_type", "classifier_moe")).lower()
+        if self.hybrid_head_type == "classifier_moe":
+            head_config = dict(config.get("classifier_moe", {}))
+            head_config.setdefault("num_experts", 4)
+            head_config.setdefault("top_k", 2)
+            head_config.setdefault("expert_hidden_dim", 512)
+            head_config.setdefault("dropout", config.get("dropout", 0.1))
+            head_config.setdefault("load_balance_loss_coef", 0.01)
+            head_config.setdefault("shared_expert", False)
+            head_config.setdefault("use_residual", False)
+            head_config.setdefault("routing_type", "top_k")
+            head_config.setdefault("activation", "gelu")
+            self.classifier_moe = ClassifierMoEHead(
+                input_dim=int(self.backbone.config.hidden_size),
+                num_labels=num_labels,
+                num_experts=int(head_config["num_experts"]),
+                top_k=int(head_config["top_k"]),
+                expert_hidden_dim=int(head_config["expert_hidden_dim"]),
+                dropout=float(head_config["dropout"]),
+                load_balance_loss_coef=float(head_config["load_balance_loss_coef"]),
+                shared_expert=bool(head_config["shared_expert"]),
+                use_residual=bool(head_config["use_residual"]),
+                routing_type=str(head_config["routing_type"]),
+                activation=str(head_config["activation"]),
+            )
+            self.num_classifier_experts = self.classifier_moe.num_experts
+            self.classifier_top_k = self.classifier_moe.top_k
+        elif self.hybrid_head_type == "dynamic_moe":
+            head_config = dict(config.get("dynamic_moe", {}))
+            head_config.setdefault("num_experts", 4)
+            head_config.setdefault("top_k", 2)
+            head_config.setdefault("routing_type", "top_k")
+            head_config.setdefault("expert_hidden_dim", int(self.backbone.config.hidden_size))
+            head_config.setdefault("dropout", config.get("dropout", 0.1))
+            self.dynamic_moe = DynamicMoEHead(
+                input_dim=int(self.backbone.config.hidden_size),
+                num_labels=num_labels,
+                config=head_config,
+            )
+            self.num_classifier_experts = self.dynamic_moe.num_experts
+            self.classifier_top_k = getattr(self.dynamic_moe, "top_k", None)
+        else:
+            raise ValueError("hybrid_head_type must be 'classifier_moe' or 'dynamic_moe'")
 
         self.freeze_attention = bool(config.get("freeze_attention", False))
         self.freeze_embeddings = bool(config.get("freeze_embeddings", False))
@@ -93,7 +112,12 @@ class HybridMoEClassifier(nn.Module):
             mask = attention_mask.unsqueeze(-1).to(hidden_states.dtype)
             pooled = (hidden_states * mask).sum(dim=1) / mask.sum(dim=1).clamp_min(1.0)
 
-        logits, classifier_aux = self.classifier_moe(pooled)
+        if self.hybrid_head_type == "classifier_moe":
+            logits, classifier_aux = self.classifier_moe(pooled)
+            head_name = "classifier_moe"
+        else:
+            logits, classifier_aux = self.dynamic_moe(pooled)
+            head_name = "dynamic_moe"
         transformer_balance_loss = pooled.new_zeros(())
         transformer_dynamic_loss = pooled.new_zeros(())
         transformer_routing: dict[str, dict[str, Any]] = {}
@@ -112,14 +136,7 @@ class HybridMoEClassifier(nn.Module):
             "transformer_balance_loss": transformer_balance_loss,
             "classifier_balance_loss": classifier_balance_loss,
             "transformer_dynamic_loss": transformer_dynamic_loss,
-            "layer_routing": {
-                **transformer_routing,
-                "classifier_moe": {
-                    "probabilities": classifier_aux["probabilities"],
-                    "top_indices": classifier_aux["top_indices"],
-                    "balance_loss": classifier_balance_loss,
-                },
-            },
-            "classifier_moe": classifier_aux,
+            "layer_routing": {**transformer_routing, head_name: classifier_aux},
+            head_name: classifier_aux,
         }
         return logits, aux

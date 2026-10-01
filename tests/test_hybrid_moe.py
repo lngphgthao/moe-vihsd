@@ -93,6 +93,32 @@ class TestHybridMoE(unittest.TestCase):
         finally:
             hybrid_module.TransformerMoEClassifier = original
 
+    def test_dynamic_head_variant(self):
+        import src.models.hybrid_moe as hybrid_module
+
+        original = hybrid_module.TransformerMoEClassifier
+        hybrid_module.TransformerMoEClassifier = FakeTransformerMoE
+        try:
+            model = build_model(
+                {
+                    "architecture": "hybrid_moe",
+                    "pretrained_model_name": "dummy",
+                    "hybrid_head_type": "dynamic_moe",
+                    "dynamic_moe": {
+                        "num_experts": 4,
+                        "routing_type": "top_k",
+                        "top_k": 2,
+                    },
+                },
+                vocab_size=100,
+                num_labels=3,
+            )
+            self.assertTrue(hasattr(model, "dynamic_moe"))
+            self.assertEqual(model.num_classifier_experts, 4)
+            self.assertEqual(model.classifier_top_k, 2)
+        finally:
+            hybrid_module.TransformerMoEClassifier = original
+
 
 if __name__ == "__main__":
     unittest.main()
