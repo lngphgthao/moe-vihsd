@@ -33,6 +33,7 @@ class DatasetBundle:
     tokenizer: Any
     loaders: dict[str, DataLoader]
     label_names: list[str]
+    label_mapping: dict[Any, int]
     num_labels: int
 
 
@@ -187,7 +188,27 @@ def prepare_data(config: dict) -> DatasetBundle:
     limit = config.get("max_train_samples")
     if limit:
         train_name = config["train_split"]
-        tokenized[train_name] = tokenized[train_name].select(range(min(limit, len(tokenized[train_name]))))
+        limit = min(int(limit), len(tokenized[train_name]))
+        if config.get("train_subset_strategy") == "stratified":
+            labels = tokenized[train_name]["labels"]
+            selected_indices = []
+            class_indices = {
+                class_id: [index for index, label in enumerate(labels) if int(label) == class_id]
+                for class_id in range(len(label_names))
+            }
+            quota, remainder = divmod(limit, len(label_names))
+            for class_id in range(len(label_names)):
+                class_quota = quota + (1 if class_id < remainder else 0)
+                selected_indices.extend(class_indices[class_id][:class_quota])
+            if len(selected_indices) < limit:
+                selected_set = set(selected_indices)
+                selected_indices.extend(
+                    index for index in range(len(labels)) if index not in selected_set
+                )
+                selected_indices = selected_indices[:limit]
+            tokenized[train_name] = tokenized[train_name].select(selected_indices)
+        else:
+            tokenized[train_name] = tokenized[train_name].select(range(limit))
     eval_limit = config.get("max_eval_samples")
     if eval_limit:
         for split_name in [config["validation_split"], config["test_split"]]:
@@ -199,4 +220,4 @@ def prepare_data(config: dict) -> DatasetBundle:
         "validation": DataLoader(tokenized[config["validation_split"]], batch_size=config["batch_size"], num_workers=config["num_workers"]),
         "test": DataLoader(tokenized[config["test_split"]], batch_size=config["batch_size"], num_workers=config["num_workers"]),
     }
-    return DatasetBundle(tokenizer, loaders, label_names, len(label_names))
+    return DatasetBundle(tokenizer, loaders, label_names, label_to_id, len(label_names))

@@ -25,6 +25,7 @@ from tqdm.auto import tqdm
 from src.models.factory import build_model, standardize_model_output
 from src.data.loader import prepare_data
 from src.training.losses import compute_task_loss
+from src.training.diagnostics import collect_model_diagnostics
 from src.evaluation.metrics import compute_classification_metrics
 from src.utils import (
     apply_overrides,
@@ -69,6 +70,9 @@ def train_epoch(model, loader, optimizer, device, balance_factor, epoch, total_e
     model.train()
     total_loss = 0.0
     total_auxiliary_loss = 0.0
+    total_classification_loss = 0.0
+    total_balance_loss = 0.0
+    total_dynamic_loss = 0.0
     total_correct = 0
     total_examples = 0
     all_preds = []
@@ -95,6 +99,9 @@ def train_epoch(model, loader, optimizer, device, balance_factor, epoch, total_e
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()
         total_loss += loss.item() * labels.size(0)
+        total_classification_loss += float(classification_loss) * labels.size(0)
+        total_balance_loss += float(balance_loss) * labels.size(0)
+        total_dynamic_loss += float(dynamic_loss) * labels.size(0)
         total_auxiliary_loss += (float(balance_loss) + float(dynamic_loss)) * labels.size(0)
         preds = logits.argmax(dim=-1).cpu().tolist()
         labs = labels.cpu().tolist()
@@ -107,6 +114,9 @@ def train_epoch(model, loader, optimizer, device, balance_factor, epoch, total_e
     avg_loss = (total_loss / total_examples) if total_examples > 0 else 0.0
     return {
         "loss": avg_loss,
+        "classification_loss": (total_classification_loss / total_examples) if total_examples > 0 else 0.0,
+        "balance_loss": (total_balance_loss / total_examples) if total_examples > 0 else 0.0,
+        "dynamic_loss": (total_dynamic_loss / total_examples) if total_examples > 0 else 0.0,
         "auxiliary_loss": (total_auxiliary_loss / total_examples) if total_examples > 0 else 0.0,
         "accuracy": cls_metrics["accuracy"],
         "macro_f1": cls_metrics["macro_f1"],
@@ -136,6 +146,11 @@ def apply_training_profile(config, smoke_test_override):
         training_config["epochs"] = smoke_config.get("epochs", 1)
         training_config["max_train_samples"] = smoke_config.get("max_train_samples", 2000)
         training_config["max_eval_samples"] = smoke_config.get("max_eval_samples", 500)
+    tiny_overfit = config.get("diagnostics", {}).get("tiny_overfit", {})
+    if tiny_overfit.get("enabled", False):
+        training_config["epochs"] = int(tiny_overfit.get("epochs", 75))
+        training_config["max_train_samples"] = int(tiny_overfit.get("samples", 150))
+        training_config["train_subset_strategy"] = "stratified"
     return smoke_test
 
 
@@ -147,6 +162,7 @@ def create_hyperparameters_log(config, run_id, smoke_test):
         "training": config["training"],
         "model": config["model"],
         "routing": config["routing"],
+        "diagnostics": config.get("diagnostics", {}),
     }
     architecture = config.get("model", {}).get("architecture", "transformer_moe")
     return {
@@ -253,6 +269,17 @@ def main() -> None:
         "pretrained_model_name", data_config.get("tokenizer")
     )
     bundle = prepare_data(data_config)
+    print("Label mapping:")
+    print(json.dumps({"label_names": bundle.label_names, "label_mapping": bundle.label_mapping}, indent=2, default=str))
+    train_labels = torch.as_tensor(bundle.loaders["train"].dataset["labels"], dtype=torch.long)
+    train_class_counts = torch.bincount(train_labels, minlength=bundle.num_labels).tolist()
+    print("Training class counts:", dict(zip(bundle.label_names, train_class_counts)))
+    if config.get("diagnostics", {}).get("tiny_overfit", {}).get("enabled", False):
+        if any(count == 0 for count in train_class_counts):
+            raise ValueError(
+                "Tiny-overfit training subset does not contain every configured class: "
+                f"{dict(zip(bundle.label_names, train_class_counts))}"
+            )
     model_config = {**config["model"], "pad_token_id": bundle.tokenizer.pad_token_id or 0}
     model_config.setdefault("architecture", "transformer_moe")
     model = build_model(model_config, bundle.tokenizer.vocab_size, bundle.num_labels).to(device)
@@ -298,6 +325,16 @@ def main() -> None:
     (checkpoint_dir / "resolved_config.yaml").write_text(
         yaml.safe_dump(config, sort_keys=False), encoding="utf-8"
     )
+    (results_dir / "label_mapping.json").write_text(
+        json.dumps(
+            {
+                "label_names": bundle.label_names,
+                "label_mapping": {str(key): value for key, value in bundle.label_mapping.items()},
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
     hyperparameters_path = results_dir / "hyperparameters.json"
     hyperparameters_path.write_text(
         json.dumps(create_hyperparameters_log(config, run_id, smoke_test), indent=2, sort_keys=True),
@@ -328,6 +365,9 @@ def main() -> None:
         record = {
             "epoch": epoch + 1,
             "train_loss": train_metrics["loss"],
+            "train_classification_loss": train_metrics["classification_loss"],
+            "train_balance_loss": train_metrics["balance_loss"],
+            "train_dynamic_loss": train_metrics["dynamic_loss"],
             "train_auxiliary_loss": train_metrics["auxiliary_loss"],
             "train_accuracy": train_metrics["accuracy"],
             "train_macro_f1": train_metrics["macro_f1"],
@@ -372,6 +412,11 @@ def main() -> None:
     model.load_state_dict(load_file(str(best_checkpoint_path), device=str(device)))
     test_metrics = evaluate(model, bundle.loaders["test"], device, label_names=bundle.label_names)
     routing_diagnostics = {}
+    model_diagnostics = {}
+    if config.get("diagnostics", {}).get("collect_model_diagnostics", False):
+        model_diagnostics = collect_model_diagnostics(
+            model, bundle.loaders["train"], device, bundle.label_names
+        )
     if (
         hasattr(model, "moe_layers")
         or hasattr(getattr(model, "module", model), "moe_layers")
@@ -391,8 +436,15 @@ def main() -> None:
         "run_id": run_id,
         "best_epoch": best_record["epoch"],
         "routing_diagnostics": routing_diagnostics,
+        "model_diagnostics": model_diagnostics,
+        "label_names": bundle.label_names,
+        "label_mapping": {str(key): value for key, value in bundle.label_mapping.items()},
         "train": {
             "loss": best_record["train_loss"],
+            "classification_loss": best_record["train_classification_loss"],
+            "balance_loss": best_record["train_balance_loss"],
+            "dynamic_loss": best_record["train_dynamic_loss"],
+            "auxiliary_loss": best_record["train_auxiliary_loss"],
             "accuracy": best_record["train_accuracy"],
             "macro_f1": best_record["train_macro_f1"],
             "weighted_f1": best_record["train_weighted_f1"],

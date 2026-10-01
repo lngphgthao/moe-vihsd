@@ -1,0 +1,13 @@
+# Diagnostic-only tiny-set overfit run for classifier/MoE collapse analysis.
+# This intentionally changes only the diagnostic training profile: dataset size and epochs.
+base_config: ../vianli.yaml
+
+model:
+  architecture: transformer_moe
+
+diagnostics:
+  collect_model_diagnostics: true
+  tiny_overfit:
+    enabled: true
+    samples: 150
+    epochs: 75

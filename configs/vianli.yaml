@@ -16,16 +16,16 @@ base_config: vihsd_best.yaml
 seed: 42
 
 dataset:
-  name: data/vianli_segmented   # local path to pre-segmented dataset (run segment_vianli.py first)
+  name: data/vianli_segmented # local path to pre-segmented dataset (run segment_vianli.py first)
   config: null
-  input_mode: nli               # signals premise+hypothesis two-sequence tokenization
+  input_mode: nli # signals premise+hypothesis two-sequence tokenization
   premise_column: premise
   hypothesis_column: hypothesis
   label_column: label
   # Explicit label order fixes the mapping: entailment=0, contradiction=1, neutral=2
   label_names: [entailment, contradiction, neutral]
   tokenizer: vinai/phobert-base
-  max_length: 256               # NLI pairs are longer than single hate-speech posts
+  max_length: 256 # NLI pairs are longer than single hate-speech posts
   train_split: train
   validation_split: validation
   test_split: test
@@ -33,11 +33,11 @@ dataset:
 
 training:
   smoke_test: false
-  epochs: 7                     # paper's setting (NLIMoEDynamic used 7 epochs)
+  epochs: 7 # paper's setting (NLIMoEDynamic used 7 epochs)
   batch_size: 16
-  learning_rate: 0.00001        # paper's setting (1e-5; their model used this for XLM-R)
-  weight_decay: 0.0             # paper's setting (0.0; no L2 regularization)
-  loss_type: cross_entropy      # ViANLI labels are roughly balanced (no reweighting needed)
+  learning_rate: 0.00001 # paper's setting (1e-5; their model used this for XLM-R)
+  weight_decay: 0.0 # paper's setting (0.0; no L2 regularization)
+  loss_type: cross_entropy # ViANLI labels are roughly balanced (no reweighting needed)
   focal_gamma: 2.0
   class_weights: null
   num_workers: 0
@@ -51,3 +51,10 @@ logging:
   use_wandb: true
   project: moe-vianli
   run_name: vianli-moe-all12
+
+diagnostics:
+  collect_model_diagnostics: false
+  tiny_overfit:
+    enabled: false
+    samples: 150
+    epochs: 75
