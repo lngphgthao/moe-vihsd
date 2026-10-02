@@ -17,6 +17,6 @@ routing:
   dynamic_loss_factor: 0.001
 
 logging:
-  use_wandb: false
+  use_wandb: true
   project: nlimoe-baseline
   run_name: vianli-nlimoe-dynamic
