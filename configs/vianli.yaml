@@ -16,7 +16,7 @@ base_config: finalists/vihsd_best.yaml
 seed: 42
 
 dataset:
-  name: data/vianli_segmented # local path to pre-segmented dataset (run segment_vianli.py first)
+  name: uitnlp/ViANLI # local path to pre-segmented dataset (run segment_vianli.py first)
   config: null
   input_mode: nli # signals premise+hypothesis two-sequence tokenization
   premise_column: premise
