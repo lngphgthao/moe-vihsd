@@ -6,6 +6,8 @@ model:
   architecture: hybrid_moe
   pretrained_model_name: xlm-roberta-base
   pooling: cls
+  transformer_moe_dropout: 0.1
+  classifier_dropout: 0.0
   transformer_moe:
     moe_layers: [6, 7, 8, 9, 10, 11]
     num_experts: 6

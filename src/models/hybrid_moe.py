@@ -48,6 +48,7 @@ class HybridMoEClassifier(nn.Module):
             head_config.setdefault("top_k", 2)
             head_config.setdefault("expert_hidden_dim", 512)
             head_config.setdefault("dropout", config.get("dropout", 0.1))
+            head_config.setdefault("classifier_dropout", config.get("classifier_dropout", 0.0))
             head_config.setdefault("load_balance_loss_coef", 0.01)
             head_config.setdefault("shared_expert", False)
             head_config.setdefault("use_residual", False)
@@ -65,6 +66,7 @@ class HybridMoEClassifier(nn.Module):
                 use_residual=bool(head_config["use_residual"]),
                 routing_type=str(head_config["routing_type"]),
                 activation=str(head_config["activation"]),
+                classifier_dropout=float(head_config["classifier_dropout"]),
             )
             self.num_classifier_experts = self.classifier_moe.num_experts
             self.classifier_top_k = self.classifier_moe.top_k
@@ -74,7 +76,13 @@ class HybridMoEClassifier(nn.Module):
             head_config.setdefault("top_k", 2)
             head_config.setdefault("routing_type", "top_k")
             head_config.setdefault("expert_hidden_dim", int(self.backbone.config.hidden_size))
-            head_config.setdefault("dropout", config.get("dropout", 0.1))
+            head_config.setdefault(
+                "expert_dropout",
+                config.get("nlimoe_expert_dropout", config.get("dropout", 0.1)),
+            )
+            head_config.setdefault(
+                "classifier_dropout", config.get("classifier_dropout", config.get("dropout", 0.1))
+            )
             self.nlimoe = DynamicMoEHead(
                 input_dim=int(self.backbone.config.hidden_size),
                 num_labels=num_labels,

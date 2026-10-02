@@ -67,16 +67,19 @@ class NLIMoEClassifier(nn.Module):
                 raise ValueError("model.dynamic_threshold_temperature must be positive")
             self.complexity_gate = nn.Linear(hidden_size, 1)
 
+        nlimoe_expert_dropout = float(
+            config.get("nlimoe_expert_dropout", config.get("dropout", 0.1))
+        )
         self.router = nn.Linear(hidden_size, self.num_experts)
         self.experts = nn.ModuleList(
             [nn.Sequential(
                 nn.Linear(hidden_size, hidden_size),
-                nn.Dropout(float(config.get("dropout", 0.1))),
+                nn.Dropout(nlimoe_expert_dropout),
                 nn.ReLU(),
             ) for _ in range(self.num_experts)]
         )
         self.layer_norm = nn.LayerNorm(hidden_size)
-        self.dropout = nn.Dropout(float(config.get("dropout", 0.1)))
+        self.dropout = nn.Dropout(nlimoe_expert_dropout)
         self.classifier = nn.Linear(hidden_size, num_labels)
         self.last_routing_info: dict[str, torch.Tensor] = {}
         if bool(config.get("freeze_backbone", False)):

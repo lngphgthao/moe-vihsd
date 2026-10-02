@@ -23,6 +23,8 @@ class DenseTransformerClassifier(nn.Module):
         if self.freeze_backbone:
             for parameter in self.backbone.parameters():
                 parameter.requires_grad = False
+        classifier_dropout = float(config.get("classifier_dropout", 0.0))
+        self.classifier_dropout = nn.Dropout(classifier_dropout)
         self.classifier = nn.Linear(self.backbone.config.hidden_size, num_labels)
 
     def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor):
@@ -33,4 +35,4 @@ class DenseTransformerClassifier(nn.Module):
         else:
             mask = attention_mask.unsqueeze(-1).to(hidden_states.dtype)
             pooled = (hidden_states * mask).sum(dim=1) / mask.sum(dim=1).clamp_min(1.0)
-        return self.classifier(pooled)
+        return self.classifier(self.classifier_dropout(pooled))

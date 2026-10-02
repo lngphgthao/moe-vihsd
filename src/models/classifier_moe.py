@@ -78,6 +78,7 @@ class ClassifierMoEHead(nn.Module):
         use_residual: bool = False,
         routing_type: str = "top_k",
         activation: str = "gelu",
+        classifier_dropout: float = 0.0,
     ) -> None:
         super().__init__()
         self.input_dim = int(input_dim)
@@ -91,6 +92,7 @@ class ClassifierMoEHead(nn.Module):
         self.use_residual = bool(use_residual)
         self.routing_type = str(routing_type).lower()
         self.activation = str(activation).lower()
+        self.classifier_dropout = nn.Dropout(float(classifier_dropout))
 
         if self.num_experts < 1:
             raise ValueError("num_experts must be at least 1")
@@ -156,7 +158,7 @@ class ClassifierMoEHead(nn.Module):
         else:
             combined = moe_output
 
-        logits = self.classifier(combined)
+        logits = self.classifier(self.classifier_dropout(combined))
         balance_loss = self.router.load_balance_loss(probabilities, top_indices)
 
         self.last_routing_info = {
@@ -202,7 +204,9 @@ class ClassifierMoEClassifier(nn.Module):
         top_k = int(config.get("top_k", 2))
         routing_type = str(config.get("routing_type", config.get("routing_method", "top_k"))).lower()
         expert_hidden_dim = int(config.get("expert_hidden_dim", config.get("expert_hidden_size", 512) or 512))
-        dropout = float(config.get("dropout", 0.1))
+        dropout = float(
+            config.get("classifier_moe_dropout", config.get("dropout", 0.1))
+        )
         load_balance_loss_coef = float(config.get("load_balance_loss_coef", config.get("load_balance_loss_factor", 0.01)))
         shared_expert = bool(config.get("shared_expert", False))
         use_residual = bool(config.get("use_residual", False))
@@ -222,6 +226,7 @@ class ClassifierMoEClassifier(nn.Module):
             use_residual=use_residual,
             routing_type=routing_type,
             activation=activation,
+            classifier_dropout=0.0,
         )
 
     @property
@@ -239,4 +244,3 @@ class ClassifierMoEClassifier(nn.Module):
             pooled = (hidden_states * mask).sum(dim=1) / mask.sum(dim=1).clamp_min(1.0)
 
         return self.classifier_moe(pooled)
-

@@ -3,11 +3,13 @@ base_config: vianli_hybrid_moe_xlmr.yaml
 
 model:
   hybrid_head_type: nlimoe
+  transformer_moe_dropout: 0.1
+  nlimoe_expert_dropout: 0.1
+  classifier_dropout: 0.1
   nlimoe:
     num_experts: 4
     routing_type: dynamic
     expert_hidden_dim: 768
-    dropout: 0.1
 
 logging:
   run_name: vianli-hybrid-moe-xlmr-last6-dynamic-head-e4-dynamic

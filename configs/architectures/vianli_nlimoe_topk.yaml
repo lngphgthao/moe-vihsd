@@ -2,13 +2,13 @@ base_config: ../vianli.yaml
 
 model:
   architecture: nlimoe
-  pretrained_model_name: xlm-roberta-large
+  pretrained_model_name: xlm-roberta-base
   freeze_backbone: false
   num_experts: 5
   dynamic_num_experts: 5
   dynamic_top_k: 4
   routing_type: top_k
-  dropout: 0.4
+  nlimoe_expert_dropout: 0.4
 
 routing:
   load_balance_loss_factor: 0.01

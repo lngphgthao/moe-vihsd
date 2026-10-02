@@ -38,13 +38,14 @@ class DynamicMoEHead(nn.Module):
             self.complexity_gate = nn.Linear(self.input_dim, 1)
 
         expert_hidden_dim = int(config.get("expert_hidden_dim", self.input_dim))
-        dropout = float(config.get("dropout", 0.1))
+        expert_dropout = float(config.get("expert_dropout", config.get("dropout", 0.1)))
+        classifier_dropout = float(config.get("classifier_dropout", config.get("dropout", 0.1)))
         self.router = nn.Linear(self.input_dim, self.num_experts)
         self.experts = nn.ModuleList(
             [
                 nn.Sequential(
                     nn.Linear(self.input_dim, expert_hidden_dim),
-                    nn.Dropout(dropout),
+                    nn.Dropout(expert_dropout),
                     nn.ReLU(),
                     nn.Linear(expert_hidden_dim, self.input_dim),
                 )
@@ -52,7 +53,7 @@ class DynamicMoEHead(nn.Module):
             ]
         )
         self.layer_norm = nn.LayerNorm(self.input_dim)
-        self.dropout = nn.Dropout(dropout)
+        self.dropout = nn.Dropout(classifier_dropout)
         self.classifier = nn.Linear(self.input_dim, self.num_labels)
         self.last_routing_info: dict[str, Any] = {}
 

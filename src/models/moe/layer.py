@@ -263,7 +263,9 @@ class TransformerMoEClassifier(nn.Module):
         routing_method = str(config.get("routing_method", "top_k")).lower()
         self.num_experts = num_experts
         self.top_k = top_k
-        dropout = float(config.get("dropout", 0.1))
+        dropout = float(
+            config.get("transformer_moe_dropout", config.get("dropout", 0.1))
+        )
         upcycle = bool(config.get("upcycle", True))
         use_shared_expert = bool(config.get("shared_expert", False))
         expert_type = str(config.get("expert_type", "gelu")).lower()
