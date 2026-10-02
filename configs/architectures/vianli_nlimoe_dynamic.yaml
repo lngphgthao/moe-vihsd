@@ -1,0 +1,24 @@
+base_config: ../vianli.yaml
+
+model:
+  architecture: nlimoe
+  pretrained_model_name: xlm-roberta-large
+  freeze_backbone: false
+  num_experts: 7
+  dropout: 0.4
+  routing_type: dynamic
+  dynamic_num_experts: 7
+  dynamic_static_threshold: 0.1
+  dynamic_threshold_scale: 0.1
+  dynamic_threshold_temperature: 0.02
+
+routing:
+  load_balance_loss_factor: 0.01
+  dynamic_loss_factor: 0.001
+
+logging:
+  use_wandb: false
+  project: nlimoe-baseline
+  run_name: vianli-nlimoe-dynamic
+
+

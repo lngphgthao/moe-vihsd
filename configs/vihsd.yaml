@@ -1,4 +1,5 @@
 seed: 42
+
 dataset:
   name: data/vihsd_segmented
   config: null
@@ -10,6 +11,7 @@ dataset:
   validation_split: validation
   test_split: test
   tokenization_num_proc: 2
+
 training:
   smoke_test: false
   epochs: 5
@@ -28,6 +30,7 @@ training:
     epochs: 1
     max_train_samples: 2000
     max_eval_samples: 500
+
 model:
   architecture: transformer_moe
   pretrained_model_name: vinai/phobert-base
@@ -56,12 +59,15 @@ model:
   model_dim: 128
   expert_hidden_dim: 512
   dropout: 0.1
+
 routing:
   load_balance_loss_factor: 0.01
   dynamic_loss_factor: 0.001 # entropy penalty for either dynamic router
+
 paths:
   checkpoint_dir: checkpoints
   results_dir: results
+
 logging:
   use_wandb: true
   project: moe-vihsd
