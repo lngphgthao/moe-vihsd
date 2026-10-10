@@ -1,5 +1,5 @@
 # ViANLI experiment configuration
-# Inherits the best confirmed ViHSD architecture (All 12 Layers, Top-2, Learnable Residual Scale,
+# Defines the ViANLI architecture directly; it does not inherit the ViHSD configuration.
 # Upcycled, σ=0.0) and adapts it for 3-class adversarial NLI.
 #
 # Run segmentation first:
@@ -11,8 +11,6 @@
 #
 #   python train.py --config configs/vianli.yaml --no-smoke-test \
 #     --run-id vianli-moe-all12-s42 --set seed=42
-base_config: finalists/vihsd_best.yaml
-
 seed: 42
 
 dataset:
@@ -46,6 +44,23 @@ model:
   top_k: 4
   upcycle: true # clone pretrained XLM-R FFN weights into all experts
   shared_expert: false # true = always-active shared expert (Stage B experiments)
+  expert_type: gelu
+  expert_hidden_size: null
+  expert_init_noise: 0.0
+  learnable_residual_scale: true
+  residual_scale_init: 1.0
+  freeze_attention: false
+  freeze_embeddings: false
+  pooling: cls
+  freeze_backbone: false
+  model_dim: 128
+  expert_hidden_dim: 512
+  dropout: 0.1
+  classifier_dropout: 0.0
+  transformer_moe_dropout: 0.1
+  classifier_moe_dropout: 0.1
+  nlimoe_expert_dropout: 0.1
+
 training:
   smoke_test: false
   epochs: 7 # paper's setting (NLIMoEDynamic used 7 epochs)
@@ -73,3 +88,11 @@ diagnostics:
     enabled: false
     samples: 150
     epochs: 75
+
+routing:
+  load_balance_loss_factor: 0.01
+  dynamic_loss_factor: 0.001
+
+paths:
+  checkpoint_dir: checkpoints
+  results_dir: results
