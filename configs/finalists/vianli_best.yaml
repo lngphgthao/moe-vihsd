@@ -12,8 +12,9 @@ model:
   architecture: transformer_moe
   pretrained_model_name: xlm-roberta-base
   moe_layers: [6, 7, 8, 9, 10, 11]
-  num_experts: 4
+  num_experts: 6
   routing_method: dynamic_threshold
+  transformer_moe_dropout: 0.05
 
 logging:
   use_wandb: true
