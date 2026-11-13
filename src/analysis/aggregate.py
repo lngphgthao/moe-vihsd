@@ -1,4 +1,4 @@
-"""Aggregate and format results across dense and MoE experiment groups."""
+"""Aggregate và format result giữa các dense và MoE experiment group."""
 
 from __future__ import annotations
 
@@ -21,12 +21,12 @@ def resolve_results_dir(configured_dir: str = "results") -> Path:
 
 
 def is_ignored(path: Path) -> bool:
-    """Ignore hidden files, Colab checkpoints, and cache directories."""
+    """Bỏ qua hidden file, Colab checkpoint và cache directory."""
     return any(part.startswith(".") or part == "__pycache__" for part in path.parts)
 
 
 def find_runs(results_dir: Path) -> list[tuple[Path, Path]]:
-    """Find (run_dir, metrics_path) pairs under results_dir.
+    """Tìm các cặp (run_dir, metrics_path) trong results_dir.
     
     Supports:
       1. results_dir/<folder>/run_metrics.json (direct child)
@@ -42,7 +42,7 @@ def find_runs(results_dir: Path) -> list[tuple[Path, Path]]:
 
     candidate_names = ["run_metrics.json", "metrics.json", "vihsd_predictions.json"]
 
-    # Check if results_dir itself is a single run folder
+    # Kiểm tra results_dir có phải một run folder đơn hay không.
     for name in candidate_names:
         direct_file = results_dir / name
         if direct_file.is_file() and not is_ignored(direct_file):
@@ -50,12 +50,12 @@ def find_runs(results_dir: Path) -> list[tuple[Path, Path]]:
             seen_dirs.add(results_dir)
             return discovered
 
-    # Inspect each child entry
+    # Kiểm tra từng entry con.
     for child in sorted(results_dir.iterdir()):
         if not child.is_dir() or is_ignored(child):
             continue
 
-        # 1. Direct file under folder
+        # 1. File trực tiếp trong folder.
         metrics_file = None
         for name in candidate_names:
             candidate = child / name
@@ -68,37 +68,37 @@ def find_runs(results_dir: Path) -> list[tuple[Path, Path]]:
             seen_dirs.add(child)
             continue
 
-        # 2. Nested files inside child folder (e.g. results/<folder>/<run_id>/run_metrics.json)
+        # 2. File nested trong folder con, ví dụ results/<folder>/<run_id>/run_metrics.json.
         for name in candidate_names:
             nested_files = [p for p in sorted(child.rglob(name)) if not is_ignored(p)]
-            new_found = False
             for nf in nested_files:
                 parent_dir = nf.parent
                 if parent_dir not in seen_dirs:
                     discovered.append((parent_dir, nf))
                     seen_dirs.add(parent_dir)
-                    new_found = True
-            if new_found:
-                break
 
     return discovered
 
 
-def normalize_pct(val: Any) -> float:
-    """Normalize decimal metric (e.g. 0.648) to percentage (64.8) or keep percentage."""
+def normalize_pct(val: Any) -> float | None:
+    """Chuẩn hóa metric decimal, ví dụ 0.648 thành percentage 64.8."""
     if val is None:
-        return 0.0
+        return None
     try:
         f = float(val)
     except (ValueError, TypeError):
-        return 0.0
+        return None
     if 0.0 < f <= 1.0:
         return f * 100.0
     return f
 
 
+def format_score(value: float | None, suffix: str = "") -> str:
+    return "-" if value is None else f"{value:.2f}{suffix}"
+
+
 def format_lr(lr: Any) -> str:
-    """Format learning rate in readable scientific notation (e.g. 2e-5)."""
+    """Format learning rate theo scientific notation dễ đọc, ví dụ 2e-5."""
     if lr is None or lr == "-":
         return "-"
     try:
@@ -109,15 +109,15 @@ def format_lr(lr: Any) -> str:
 
 
 def extract_run_date(run_dir: Path, metrics_path: Path, metrics: dict[str, Any], params: dict[str, Any]) -> str:
-    """Extract or infer the timestamp/date when training was run."""
-    # 1. Check in metrics or params dict
+    """Lấy hoặc suy ra timestamp/date khi training chạy."""
+    # 1. Kiểm tra trong metrics hoặc params dict.
     for cand in ["timestamp", "created_at", "run_date", "date", "start_time"]:
         if cand in metrics and metrics[cand]:
             return str(metrics[cand])
         if cand in params and params[cand]:
             return str(params[cand])
 
-    # 2. Check run_dir name for ISO / compact Hanoi timestamp (e.g. 20260916T152900 or 2026-09-16)
+    # 2. Kiểm tra tên run_dir cho timestamp ISO hoặc Hanoi dạng compact.
     name = run_dir.name
     m = re.search(r"(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})", name)
     if m:
@@ -129,7 +129,7 @@ def extract_run_date(run_dir: Path, metrics_path: Path, metrics: dict[str, Any],
     if m:
         return m.group(1)
 
-    # 3. Fallback to file modification time
+    # 3. Fallback về thời gian sửa file.
     try:
         from datetime import datetime
         mtime = metrics_path.stat().st_mtime
@@ -138,77 +138,17 @@ def extract_run_date(run_dir: Path, metrics_path: Path, metrics: dict[str, Any],
         return "-"
 
 
-def infer_metadata_from_name(name: str) -> dict[str, Any]:
-    """Fallback metadata inference from run folder name."""
-    lower = name.lower()
-    meta: dict[str, Any] = {}
-
-    if "dense" in lower:
-        meta["architecture"] = "dense_phobert"
-        meta["experts"] = "-"
-        meta["top_k"] = "-"
-        meta["freeze_attention"] = "-"
-        meta["pooling"] = "mean"
-    elif "moe" in lower:
-        meta["architecture"] = "transformer_moe"
-        meta["experts"] = 4
-        meta["top_k"] = 1
-        meta["freeze_attention"] = False
-        meta["pooling"] = "cls"
-
-    # Extract num_experts (e.g. nex8, nex2, 8experts, 2experts)
-    nex_match = re.search(r"nex(\d+)|(\d+)experts?", lower)
-    if nex_match:
-        meta["experts"] = int(nex_match.group(1) or nex_match.group(2))
-
-    # Extract top_k (e.g. topk1, topk2, top-1, top-2)
-    topk_match = re.search(r"top[-_]?k?(\d+)", lower)
-    if topk_match:
-        meta["top_k"] = int(topk_match.group(1))
-
-    # Extract freeze attention
-    if any(k in lower for k in ["freeze-att", "freeze_att", "frozen-att", "frozen_att", "frozen"]):
-        meta["freeze_attention"] = True
-
-    # Extract learning rate (e.g. 1e-5, 2e-5, 3e-5, 5e-5, lr-1e-5)
-    lr_match = re.search(r"(?:lr[-_]?)?(\d+(?:\.\d+)?e[-_]?\d+)", lower)
-    if lr_match:
-        val_str = lr_match.group(1).replace("_", "")
-        try:
-            meta["learning_rate"] = float(val_str)
-        except Exception:
-            pass
-
-    # Extract pooling
-    if "mean" in lower:
-        meta["pooling"] = "mean"
-    elif "cls" in lower:
-        meta["pooling"] = "cls"
-
-    # Extract loss type
-    if "wce-balanced" in lower:
-        meta["loss_type"] = "weighted_ce (balanced)"
-    elif "wce-sqrt" in lower:
-        meta["loss_type"] = "weighted_ce (sqrt)"
-    elif "focal" in lower:
-        meta["loss_type"] = "focal"
-    elif "ce" in lower:
-        meta["loss_type"] = "cross_entropy"
-
-    return meta
-
-
 def parse_run(run_dir: Path, metrics_path: Path, results_root: Path) -> dict[str, Any] | None:
     try:
         metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
     except Exception:
         return None
 
-    # Determine display run ID from directory path relative to results root
+    # Xác định run ID hiển thị từ path tương đối với results root.
     rel_path = run_dir.relative_to(results_root).as_posix()
     run_id = rel_path if rel_path != "." else (metrics.get("run_id") or run_dir.name)
 
-    # 1. Look for hyperparameters / configs
+    # 1. Tìm hyperparameters hoặc config.
     params: dict[str, Any] = {}
     raw_config: dict[str, Any] = {}
     for cand_name in ["hyperparameters.json", "resolved_config.yaml", "config.yaml"]:
@@ -220,113 +160,60 @@ def parse_run(run_dir: Path, metrics_path: Path, results_root: Path) -> dict[str
                 elif cand_name.endswith((".yaml", ".yml")) and yaml is not None:
                     raw_config = yaml.safe_load(cand_path.read_text(encoding="utf-8")) or {}
                     if isinstance(raw_config, dict):
-                        params = {
-                            "architecture": raw_config.get("model", {}).get("architecture"),
-                            "flat_hyperparameters": {
-                                "model.architecture": raw_config.get("model", {}).get("architecture"),
-                                "model.num_experts": raw_config.get("model", {}).get("num_experts"),
-                                "model.top_k": raw_config.get("model", {}).get("top_k"),
-                                "model.freeze_attention": raw_config.get("model", {}).get("freeze_attention"),
-                                "model.pooling": raw_config.get("model", {}).get("pooling"),
-                                "training.learning_rate": raw_config.get("training", {}).get("learning_rate"),
-                                "training.loss_type": raw_config.get("training", {}).get("loss_type"),
-                            },
-                        }
-                break
+                        break
+                    raw_config = {}
             except Exception:
                 pass
 
     flat_params = params.get("flat_hyperparameters", {})
     nested_hp = params.get("hyperparameters", {})
-    inferred = infer_metadata_from_name(run_id)
 
-    arch = (
-        params.get("architecture")
-        or flat_params.get("model.architecture")
-        or nested_hp.get("model", {}).get("architecture")
-        or raw_config.get("model", {}).get("architecture")
-        or inferred.get("architecture", "transformer_moe" if "moe" in run_id else "unknown")
-    )
-    is_dense = "dense" in str(arch)
+    def recorded_value(section: str, key: str):
+        values = (
+            flat_params.get(f"{section}.{key}"),
+            nested_hp.get(section, {}).get(key),
+            raw_config.get(section, {}).get(key),
+        )
+        return next((value for value in values if value is not None), None)
 
-    num_experts = (
-        flat_params.get("model.num_experts")
-        or nested_hp.get("model", {}).get("num_experts")
-        or raw_config.get("model", {}).get("num_experts")
-        or inferred.get("experts", ("-" if is_dense else 4))
-    )
-    top_k = (
-        flat_params.get("model.top_k")
-        or nested_hp.get("model", {}).get("top_k")
-        or raw_config.get("model", {}).get("top_k")
-        or inferred.get("top_k", ("-" if is_dense else 1))
-    )
-
-    # Freeze attention
-    raw_freeze = (
-        flat_params.get("model.freeze_attention")
-        if "model.freeze_attention" in flat_params
-        else nested_hp.get("model", {}).get("freeze_attention", raw_config.get("model", {}).get("freeze_attention"))
-    )
-    if raw_freeze is not None:
-        freeze_attention = bool(raw_freeze)
-    else:
-        freeze_attention = "-" if is_dense else inferred.get("freeze_attention", False)
-
-    # Learning rate
-    learning_rate = (
-        flat_params.get("training.learning_rate")
-        or nested_hp.get("training", {}).get("learning_rate")
-        or raw_config.get("training", {}).get("learning_rate")
-        or inferred.get("learning_rate", 2e-5)
-    )
-
-    # Pooling
-    pooling = (
-        flat_params.get("model.pooling")
-        or nested_hp.get("model", {}).get("pooling")
-        or raw_config.get("model", {}).get("pooling")
-        or inferred.get("pooling", "mean" if is_dense else "cls")
-    )
-
-    # Loss type & profile
-    loss_type = (
-        flat_params.get("training.loss_type")
-        or nested_hp.get("training", {}).get("loss_type")
-        or raw_config.get("training", {}).get("loss_type")
-        or inferred.get("loss_type", "cross_entropy")
-    )
-    profile = params.get("profile", "full")
+    arch = params.get("architecture") or recorded_value("model", "architecture") or "unknown"
+    num_experts = recorded_value("model", "num_experts")
+    top_k = recorded_value("model", "top_k")
+    freeze_attention = recorded_value("model", "freeze_attention")
+    learning_rate = recorded_value("training", "learning_rate")
+    pooling = recorded_value("model", "pooling")
+    loss_type = recorded_value("training", "loss_type")
+    profile = params.get("profile", "unknown")
     best_epoch = metrics.get("best_epoch", metrics.get("epoch", "-"))
 
-    # Extract Run Date/Time
+    # Lấy ngày và giờ của run.
     run_date = extract_run_date(run_dir, metrics_path, metrics, params)
 
-    # 2. Extract metrics (support test, validation, and flat metrics schemas)
+    # Evaluation ghi artifact riêng cạnh training metric.
     test_metrics = metrics.get("test") or {}
     val_metrics = metrics.get("validation") or metrics.get("val") or {}
-
-    # If metrics is flat (e.g. from evaluate.py/predictions)
     if not test_metrics and ("macro_f1" in metrics or "accuracy" in metrics):
         test_metrics = metrics
+    predictions_path = run_dir / "vihsd_predictions.json"
+    if predictions_path.exists() and predictions_path != metrics_path:
+        predictions = json.loads(predictions_path.read_text(encoding="utf-8"))
+        test_metrics = predictions.get("test") or predictions
 
-    test_macro_f1 = normalize_pct(test_metrics.get("macro_f1", 0.0))
-    test_weighted_f1 = normalize_pct(test_metrics.get("weighted_f1", 0.0))
-    test_acc = normalize_pct(test_metrics.get("accuracy", 0.0))
+    test_macro_f1 = normalize_pct(test_metrics.get("macro_f1"))
+    test_weighted_f1 = normalize_pct(test_metrics.get("weighted_f1"))
+    test_acc = normalize_pct(test_metrics.get("accuracy"))
+    val_macro_f1 = normalize_pct(val_metrics.get("macro_f1"))
+    val_weighted_f1 = normalize_pct(val_metrics.get("weighted_f1"))
+    val_acc = normalize_pct(val_metrics.get("accuracy"))
 
-    val_macro_f1 = normalize_pct(val_metrics.get("macro_f1", 0.0))
-    val_weighted_f1 = normalize_pct(val_metrics.get("weighted_f1", 0.0))
-    val_acc = normalize_pct(val_metrics.get("accuracy", 0.0))
-
-    # Overall macro_f1 for sorting and primary reporting
-    macro_f1 = test_macro_f1 if test_macro_f1 > 0 else val_macro_f1
-    weighted_f1 = test_weighted_f1 if test_weighted_f1 > 0 else val_weighted_f1
-    acc = test_acc if test_acc > 0 else val_acc
+    macro_f1 = test_macro_f1 if test_macro_f1 is not None else val_macro_f1
+    weighted_f1 = test_weighted_f1 if test_weighted_f1 is not None else val_weighted_f1
+    acc = test_acc if test_acc is not None else val_acc
 
     per_class = test_metrics.get("per_class_f1") or val_metrics.get("per_class_f1") or {}
-    f1_clean = normalize_pct(per_class.get("0", per_class.get(0, per_class.get("CLEAN", per_class.get("clean", 0.0)))))
-    f1_offensive = normalize_pct(per_class.get("1", per_class.get(1, per_class.get("OFFENSIVE", per_class.get("offensive", 0.0)))))
-    f1_hate = normalize_pct(per_class.get("2", per_class.get(2, per_class.get("HATE", per_class.get("hate", 0.0)))))
+    f1_clean = normalize_pct(per_class.get("0", per_class.get(0, per_class.get("CLEAN", per_class.get("clean")))))
+    f1_offensive = normalize_pct(per_class.get("1", per_class.get(1, per_class.get("OFFENSIVE", per_class.get("offensive")))))
+    f1_hate = normalize_pct(per_class.get("2", per_class.get(2, per_class.get("HATE", per_class.get("hate")))))
 
     routing = metrics.get("routing_diagnostics", {})
     avg_entropy = None
@@ -340,12 +227,12 @@ def parse_run(run_dir: Path, metrics_path: Path, results_root: Path) -> dict[str
         "run_date": run_date,
         "profile": profile,
         "architecture": arch,
-        "experts": num_experts,
-        "top_k": top_k,
-        "freeze_attention": freeze_attention,
+        "experts": num_experts if num_experts is not None else "-",
+        "top_k": top_k if top_k is not None else "-",
+        "freeze_attention": freeze_attention if freeze_attention is not None else "-",
         "learning_rate": format_lr(learning_rate),
-        "pooling": pooling,
-        "loss_type": loss_type,
+        "pooling": pooling if pooling is not None else "-",
+        "loss_type": loss_type if loss_type is not None else "-",
         "epoch": best_epoch,
         "val_macro_f1": val_macro_f1,
         "val_weighted_f1": val_weighted_f1,
@@ -394,14 +281,14 @@ def format_markdown_table(rows: list[dict[str, Any]]) -> str:
         entropy_val = r.get("routing_entropy")
         entropy_text = "-" if entropy_val is None else f"{entropy_val:.3f}"
         
-        val_f1_text = f"{r['val_macro_f1']:.2f}%" if r.get("val_macro_f1", 0) > 0 else "-"
-        val_wf1_text = f"{r['val_weighted_f1']:.2f}%" if r.get("val_weighted_f1", 0) > 0 else "-"
-        val_acc_text = f"{r['val_accuracy']:.2f}%" if r.get("val_accuracy", 0) > 0 else "-"
-
-        test_f1_val = r.get("test_macro_f1", 0)
-        test_f1_text = f"**{test_f1_val:.2f}%**" if test_f1_val > 0 else "-"
-        test_wf1_text = f"{r['test_weighted_f1']:.2f}%" if r.get("test_weighted_f1", 0) > 0 else "-"
-        test_acc_text = f"{r['test_accuracy']:.2f}%" if r.get("test_accuracy", 0) > 0 else "-"
+        val_f1_text = format_score(r.get("val_macro_f1"), "%")
+        val_wf1_text = format_score(r.get("val_weighted_f1"), "%")
+        val_acc_text = format_score(r.get("val_accuracy"), "%")
+        test_f1_text = format_score(r.get("test_macro_f1"), "%")
+        if r.get("test_macro_f1") is not None:
+            test_f1_text = f"**{test_f1_text}**"
+        test_wf1_text = format_score(r.get("test_weighted_f1"), "%")
+        test_acc_text = format_score(r.get("test_accuracy"), "%")
 
         line = (
             f"| `{r['run_id']}` "
@@ -420,9 +307,9 @@ def format_markdown_table(rows: list[dict[str, Any]]) -> str:
             f"| {test_f1_text} "
             f"| {test_wf1_text} "
             f"| {test_acc_text} "
-            f"| {r['f1_clean']:.2f}% "
-            f"| {r['f1_offensive']:.2f}% "
-            f"| {r['f1_hate']:.2f}% "
+            f"| {format_score(r.get('f1_clean'), '%')} "
+            f"| {format_score(r.get('f1_offensive'), '%')} "
+            f"| {format_score(r.get('f1_hate'), '%')} "
             f"| {entropy_text} |"
         )
         lines.append(line)
@@ -443,11 +330,12 @@ def format_latex_table(rows: list[dict[str, Any]]) -> str:
         escaped_run_id = str(r["run_id"]).replace("_", "\\_")
         escaped_architecture = str(r["architecture"]).replace("_", "\\_")
         escaped_loss_type = str(r["loss_type"]).replace("_", "\\_")
-        val_f1_text = f"{r['val_macro_f1']:.2f}" if r.get("val_macro_f1", 0) > 0 else "-"
-        val_wf1_text = f"{r['val_weighted_f1']:.2f}" if r.get("val_weighted_f1", 0) > 0 else "-"
-        val_acc_text = f"{r['val_accuracy']:.2f}" if r.get("val_accuracy", 0) > 0 else "-"
-        macro_f1_val = r.get("test_macro_f1", 0) or r.get("macro_f1", 0)
-        macro_f1_text = f"\\textbf{{{macro_f1_val:.2f}}}" if macro_f1_val > 0 else "-"
+        val_f1_text = format_score(r.get("val_macro_f1"))
+        val_wf1_text = format_score(r.get("val_weighted_f1"))
+        val_acc_text = format_score(r.get("val_accuracy"))
+        macro_f1_text = format_score(r.get("test_macro_f1"))
+        if r.get("test_macro_f1") is not None:
+            macro_f1_text = f"\\textbf{{{macro_f1_text}}}"
 
         line = (
             f"{escaped_run_id} & "
@@ -504,8 +392,8 @@ def main() -> None:
         print(f"No valid run metrics could be parsed from {results_dir}.")
         return
 
-    # Sort rows
-    rows.sort(key=lambda r: r.get(args.sort_by, 0), reverse=True)
+    # Sort row.
+    rows.sort(key=lambda r: r.get(args.sort_by) if r.get(args.sort_by) is not None else float("-inf"), reverse=True)
 
     md_table = format_markdown_table(rows)
     print("\n" + "=" * 80)
@@ -514,7 +402,7 @@ def main() -> None:
     print(md_table)
     print("=" * 80 + "\n")
 
-    # Save Markdown and CSV summaries in results directory
+    # Lưu summary Markdown và CSV trong results directory.
     summary_md_path = results_dir / "summary_table.md"
     summary_md_path.write_text(md_table + "\n\n### LaTeX Table:\n\n```latex\n" + format_latex_table(rows) + "\n```\n", encoding="utf-8")
 

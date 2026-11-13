@@ -1,4 +1,4 @@
-"""General utility helpers for configuration, run tracking, and reproducibility."""
+"""Helper dùng chung cho config, theo dõi run và reproducibility."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ import yaml
 
 
 def set_seed(seed: int) -> None:
-    """Set random seed across random, numpy, and torch."""
+    """Đặt random seed cho random, numpy và torch."""
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -23,12 +23,12 @@ def set_seed(seed: int) -> None:
 
 
 def resolve_output_path(configured_path: str, environment_name: str) -> Path:
-    """Resolve an output directory from an environment variable override or config default."""
+    """Resolve output directory từ environment override hoặc config mặc định."""
     return Path(os.getenv(environment_name, configured_path)).expanduser()
 
 
 def deep_merge_dict(base: dict, overlay: dict) -> dict:
-    """Recursively merge two dictionaries."""
+    """Merge đệ quy hai dictionary."""
     merged = base.copy()
     for key, value in overlay.items():
         if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
@@ -39,7 +39,7 @@ def deep_merge_dict(base: dict, overlay: dict) -> dict:
 
 
 def load_config(config_path: str | Path) -> dict:
-    """Load a YAML config, resolving optional ``base_config`` parent overlays."""
+    """Load YAML config và resolve parent overlay ``base_config`` nếu có."""
     path = Path(config_path)
     if not path.exists():
         raise FileNotFoundError(f"Configuration file not found: {path}")
@@ -55,7 +55,7 @@ def load_config(config_path: str | Path) -> dict:
 
 
 def flatten_hyperparameters(values: dict[str, Any], prefix: str = "") -> dict[str, Any]:
-    """Return nested configuration values as stable dotted keys for comparison."""
+    """Trả về nested config dưới dạng dotted key ổn định để so sánh."""
     flattened = {}
     for key, value in values.items():
         full_key = f"{prefix}.{key}" if prefix else key
@@ -67,7 +67,7 @@ def flatten_hyperparameters(values: dict[str, Any], prefix: str = "") -> dict[st
 
 
 def create_run_id(smoke_test: bool, requested_run_id: str | None = None) -> str:
-    """Generate a timestamped run ID in Asia/Ho_Chi_Minh timezone, or return the requested ID."""
+    """Tạo run ID có timestamp theo timezone Asia/Ho_Chi_Minh hoặc giữ ID được yêu cầu."""
     if requested_run_id:
         return requested_run_id
     hanoi_timezone = timezone(timedelta(hours=7), name="Asia/Ho_Chi_Minh")
@@ -77,7 +77,7 @@ def create_run_id(smoke_test: bool, requested_run_id: str | None = None) -> str:
 
 
 def apply_overrides(config: dict, overrides: list[str]) -> dict:
-    """Apply ``section.key=value`` overrides parsed as YAML scalars."""
+    """Áp dụng override ``section.key=value`` sau khi parse như YAML scalar."""
     for override in overrides:
         if "=" not in override:
             raise ValueError(f"Invalid --set value {override!r}; expected section.key=value.")
@@ -97,7 +97,7 @@ def apply_overrides(config: dict, overrides: list[str]) -> dict:
 
 
 def find_run_checkpoint(run_dir: Path, architecture: str) -> Path:
-    """Find a checkpoint while supporting both new and legacy run folders."""
+    """Tìm checkpoint, hỗ trợ cả run folder mới và legacy."""
     candidates = [
         run_dir / f"{architecture}_best.safetensors",
         run_dir / "vihsd_moe_best.safetensors",

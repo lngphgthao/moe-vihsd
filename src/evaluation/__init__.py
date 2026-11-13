@@ -1,4 +1,4 @@
-"""Evaluation and metric utilities."""
+"""Tiện ích evaluation và metric."""
 
 from src.evaluation.metrics import compute_classification_metrics, format_classification_report
 

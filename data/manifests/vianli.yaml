@@ -1,0 +1,25 @@
+dataset: ViANLI
+source:
+  name: uitnlp/ViANLI
+  type: huggingface_hub
+  revision: 0fec8d6ecb043a61c609f9b51f80401fdf1e84d3
+  access: "Loaded by src/data/loader.py when no local DatasetDict is available."
+splits:
+  train: 8012
+  validation: 1000
+  test: 1000
+schema:
+  input_mode: nli
+  premise_column: premise
+  hypothesis_column: hypothesis
+  label_column: label
+  labels: [entailment, contradiction, neutral]
+preprocessing:
+  tokenizer: xlm-roberta-base
+  tokenizer_revision: e73636d4f797dec63c3081bb6ed5c7b0bb3f2089
+  max_length: 256
+  segmentation: "Native pair tokenization for the XLM-R path; PhoBERT segmentation is produced separately by scripts/segment_vianli.py."
+verification:
+  expected_split_sizes_checked_by: src/data/loader.py
+  checksum: null
+  notes: "Revision and split sizes are pinned by the NLIMoE experiment overlays."

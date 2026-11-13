@@ -1,4 +1,4 @@
-"""Dataset loading and tokenization utilities."""
+"""Tiện ích load dataset và tokenization."""
 
 from src.data.loader import DatasetBundle, prepare_data
 

@@ -1,4 +1,4 @@
-"""Opt-in diagnostics for investigating classifier and MoE behavior."""
+"""Diagnostics opt-in để điều tra behavior của classifier và MoE."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import Any
 
 import torch
 
-from src.models.factory import standardize_model_output
+from src.models.factory import model_inputs_from_batch, standardize_model_output
 
 
 def _class_names(label_names: list[str], class_id: int) -> str:
@@ -15,7 +15,7 @@ def _class_names(label_names: list[str], class_id: int) -> str:
 
 
 def collect_model_diagnostics(model, loader, device, label_names: list[str]) -> dict[str, Any]:
-    """Aggregate logits, probabilities, and routing by true class over a loader."""
+    """Aggregate logits, probability và routing theo true class trong loader."""
     model.eval()
     logits_by_class: dict[int, list[torch.Tensor]] = defaultdict(list)
     probabilities_by_class: dict[int, list[torch.Tensor]] = defaultdict(list)
@@ -25,10 +25,8 @@ def collect_model_diagnostics(model, loader, device, label_names: list[str]) -> 
 
     with torch.no_grad():
         for batch in loader:
-            input_ids = batch["input_ids"].to(device)
-            attention_mask = batch["attention_mask"].to(device)
             labels = batch["labels"].to(device)
-            logits, aux = standardize_model_output(model(input_ids, attention_mask))
+            logits, aux = standardize_model_output(model(**model_inputs_from_batch(batch, device)))
             probabilities = logits.softmax(dim=-1)
             for class_id in labels.unique().tolist():
                 mask = labels == class_id
@@ -38,6 +36,7 @@ def collect_model_diagnostics(model, loader, device, label_names: list[str]) -> 
             layer_routing = aux.get("layer_routing", {})
             if not layer_routing and aux.get("probabilities") is not None:
                 layer_routing = {"classifier_moe": aux}
+            attention_mask = batch["attention_mask"].to(device)
             token_labels = labels.unsqueeze(1).expand_as(attention_mask)
             valid_tokens = attention_mask.bool()
             for layer_name, info in layer_routing.items():

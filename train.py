@@ -1,4 +1,4 @@
-"""Train the full-parameter ViHSD Mixture of Experts model."""
+"""Huấn luyện mô hình Mixture of Experts đầy đủ tham số cho ViHSD."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-# Ensure repository root is on sys.path for Colab notebook execution
+# Bảo đảm Git root có trong sys.path khi chạy từ notebook Colab.
 REPO_ROOT = str(Path(__file__).resolve().parent)
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
@@ -22,7 +22,7 @@ import yaml
 from safetensors.torch import load_file, save_file
 from tqdm.auto import tqdm
 
-from src.models.factory import build_model, standardize_model_output
+from src.models.factory import build_model, model_inputs_from_batch, standardize_model_output
 from src.data.loader import prepare_data
 from src.training.losses import compute_task_loss
 from src.training.diagnostics import collect_model_diagnostics
@@ -45,10 +45,8 @@ def evaluate(model, loader, device, label_names=None):
     all_labels = []
     with torch.no_grad():
         for batch in loader:
-            input_ids = batch["input_ids"].to(device)
-            attention_mask = batch["attention_mask"].to(device)
             labels = batch["labels"].to(device)
-            logits, _ = standardize_model_output(model(input_ids, attention_mask))
+            logits, _ = standardize_model_output(model(**model_inputs_from_batch(batch, device)))
             total_loss += F.cross_entropy(logits, labels, reduction="sum").item()
             total_examples += labels.numel()
             preds = logits.argmax(dim=-1).cpu().tolist()
@@ -66,7 +64,10 @@ def evaluate(model, loader, device, label_names=None):
     }
 
 
-def train_epoch(model, loader, optimizer, device, balance_factor, epoch, total_epochs, config, label_names=None):
+def train_epoch(
+    model, loader, optimizer, device, balance_factor, epoch, total_epochs, config,
+    label_names=None, *, initial_step=0, on_evaluate=None,
+):
     model.train()
     total_loss = 0.0
     total_auxiliary_loss = 0.0
@@ -77,6 +78,27 @@ def train_epoch(model, loader, optimizer, device, balance_factor, epoch, total_e
     total_examples = 0
     all_preds = []
     all_labels = []
+    eval_frequency = config["training"].get("eval_frequency")
+    dynamic_factor = float(config["routing"].get("dynamic_loss_factor", 0.0))
+
+    def current_metrics():
+        cls_metrics = compute_classification_metrics(all_labels, all_preds, label_names=label_names)
+        denominator = max(total_examples, 1)
+        return {
+            "loss": total_loss / denominator,
+            "classification_loss": total_classification_loss / denominator,
+            "balance_loss": total_balance_loss / denominator,
+            "dynamic_loss": total_dynamic_loss / denominator,
+            "auxiliary_loss": total_auxiliary_loss / denominator,
+            "weighted_auxiliary_loss": (
+                balance_factor * total_balance_loss + dynamic_factor * total_dynamic_loss
+            ) / denominator,
+            "accuracy": cls_metrics["accuracy"],
+            "macro_f1": cls_metrics["macro_f1"],
+            "weighted_f1": cls_metrics["weighted_f1"],
+            "per_class_f1": cls_metrics["per_class_f1"],
+        }
+
     progress = tqdm(
         loader,
         desc=f"Epoch {epoch}/{total_epochs}",
@@ -84,16 +106,13 @@ def train_epoch(model, loader, optimizer, device, balance_factor, epoch, total_e
         dynamic_ncols=True,
         unit="batch",
     )
-    for batch in progress:
-        input_ids = batch["input_ids"].to(device)
-        attention_mask = batch["attention_mask"].to(device)
+    for batch_index, batch in enumerate(progress, start=1):
         labels = batch["labels"].to(device)
         optimizer.zero_grad(set_to_none=True)
-        logits, aux = standardize_model_output(model(input_ids, attention_mask))
+        logits, aux = standardize_model_output(model(**model_inputs_from_batch(batch, device)))
         classification_loss = compute_task_loss(logits, labels, config)
         balance_loss = aux.get("balance_loss", 0.0)
         dynamic_loss = aux.get("dynamic_loss", 0.0)
-        dynamic_factor = float(config["routing"].get("dynamic_loss_factor", 0.0))
         loss = classification_loss + balance_factor * balance_loss + dynamic_factor * dynamic_loss
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
@@ -110,19 +129,16 @@ def train_epoch(model, loader, optimizer, device, balance_factor, epoch, total_e
         total_correct += (logits.argmax(dim=-1) == labels).sum().item()
         total_examples += labels.size(0)
         progress.set_postfix(loss=f"{total_loss / total_examples:.4f}", accuracy=f"{total_correct / total_examples:.3f}")
-    cls_metrics = compute_classification_metrics(all_labels, all_preds, label_names=label_names)
-    avg_loss = (total_loss / total_examples) if total_examples > 0 else 0.0
-    return {
-        "loss": avg_loss,
-        "classification_loss": (total_classification_loss / total_examples) if total_examples > 0 else 0.0,
-        "balance_loss": (total_balance_loss / total_examples) if total_examples > 0 else 0.0,
-        "dynamic_loss": (total_dynamic_loss / total_examples) if total_examples > 0 else 0.0,
-        "auxiliary_loss": (total_auxiliary_loss / total_examples) if total_examples > 0 else 0.0,
-        "accuracy": cls_metrics["accuracy"],
-        "macro_f1": cls_metrics["macro_f1"],
-        "weighted_f1": cls_metrics["weighted_f1"],
-        "per_class_f1": cls_metrics["per_class_f1"],
-    }
+        global_step = initial_step + batch_index
+        final_step = epoch == total_epochs and batch_index == len(loader)
+        if eval_frequency and on_evaluate is not None and (
+            global_step % eval_frequency == 0 or final_step
+        ):
+            try:
+                on_evaluate(current_metrics(), epoch, global_step)
+            finally:
+                model.train()
+    return current_metrics()
 
 
 def maybe_start_wandb(config, run_id):
@@ -138,6 +154,11 @@ def maybe_start_wandb(config, run_id):
 
 def apply_training_profile(config, smoke_test_override):
     training_config = config["training"]
+    eval_frequency = training_config.get("eval_frequency")
+    if eval_frequency is not None and (
+        type(eval_frequency) is not int or eval_frequency <= 0
+    ):
+        raise ValueError("training.eval_frequency must be a positive integer of optimizer steps or null")
     smoke_test = training_config.get("smoke_test", False)
     if smoke_test_override is not None:
         smoke_test = smoke_test_override
@@ -155,7 +176,7 @@ def apply_training_profile(config, smoke_test_override):
 
 
 def create_hyperparameters_log(config, run_id, smoke_test):
-    """Keep only experiment-defining settings, excluding paths and credentials."""
+    """Giữ các thiết lập định nghĩa experiment, loại trừ path và credentials."""
     hyperparameters = {
         "seed": config["seed"],
         "dataset": config["dataset"],
@@ -175,7 +196,7 @@ def create_hyperparameters_log(config, run_id, smoke_test):
 
 
 def collect_routing_diagnostics(model) -> dict:
-    """Extract routing entropy and expert load fractions from the last forward pass."""
+    """Trích xuất entropy routing và tỷ lệ tải expert từ forward pass gần nhất."""
     diagnostics = {}
     inner = getattr(model, "module", model)
     if (hasattr(inner, "classifier_moe") or hasattr(inner, "nlimoe")) and hasattr(inner, "moe_layers"):
@@ -229,9 +250,10 @@ def collect_routing_diagnostics(model) -> dict:
             "routing_entropy": entropy,
             "expert_load_fractions": selected.float().mean(dim=0).tolist(),
             "mean_active_experts": selected.float().sum(dim=-1).mean().item(),
-            "mean_complexity": dynamic_info["complexity"].mean().item(),
-            "mean_threshold": dynamic_info["threshold"].mean().item(),
         }
+        for field in ("complexity", "threshold"):
+            if field in dynamic_info:
+                diagnostics["nlimoe"][f"mean_{field}"] = dynamic_info[field].mean().item()
         return diagnostics
     classifier_moe = getattr(inner, "classifier_moe", None)
     if classifier_moe is not None:
@@ -310,6 +332,8 @@ def main() -> None:
     data_config["tokenizer"] = config["model"].get(
         "pretrained_model_name", data_config.get("tokenizer")
     )
+    if config["model"].get("pretrained_model_revision") is not None:
+        data_config["tokenizer_revision"] = config["model"]["pretrained_model_revision"]
     bundle = prepare_data(data_config)
     print("Label mapping:")
     print(json.dumps({"label_names": bundle.label_names, "label_mapping": bundle.label_mapping}, indent=2, default=str))
@@ -385,32 +409,25 @@ def main() -> None:
     wandb_run = maybe_start_wandb(config, run_id)
     print(f"Training profile: {'smoke test' if smoke_test else 'full run'}")
     print(f"Run ID: {run_id}")
-    dataset_name = str(config["dataset"]["name"]).lower()
     selection_metric_name = "macro_f1"
     best_selection_metric = -1.0
     best_record = None
     history = []
     total_epochs = int(config["training"]["epochs"])
-    for epoch in range(total_epochs):
-        train_metrics = train_epoch(
-            model,
-            bundle.loaders["train"],
-            optimizer,
-            device,
-            balance_factor,
-            epoch + 1,
-            total_epochs,
-            config,
-            label_names=bundle.label_names,
-        )
+    global_step = 0
+
+    def record_validation(train_metrics, epoch, step):
+        nonlocal best_selection_metric, best_record
         val_metrics = evaluate(model, bundle.loaders["validation"], device, label_names=bundle.label_names)
         record = {
-            "epoch": epoch + 1,
+            "epoch": epoch,
+            "global_step": step,
             "train_loss": train_metrics["loss"],
             "train_classification_loss": train_metrics["classification_loss"],
             "train_balance_loss": train_metrics["balance_loss"],
             "train_dynamic_loss": train_metrics["dynamic_loss"],
             "train_auxiliary_loss": train_metrics["auxiliary_loss"],
+            "train_weighted_auxiliary_loss": train_metrics["weighted_auxiliary_loss"],
             "train_accuracy": train_metrics["accuracy"],
             "train_macro_f1": train_metrics["macro_f1"],
             "train_weighted_f1": train_metrics["weighted_f1"],
@@ -420,9 +437,10 @@ def main() -> None:
             "validation_weighted_f1": val_metrics["weighted_f1"],
         }
         history.append(record)
+        (results_dir / "training_history.json").write_text(json.dumps(history, indent=2), encoding="utf-8")
         print(record)
         if wandb_run is not None:
-            wandb_run.log(record)
+            wandb_run.log(record, step=step)
         if val_metrics[selection_metric_name] > best_selection_metric:
             best_selection_metric = val_metrics[selection_metric_name]
             save_file(
@@ -437,6 +455,8 @@ def main() -> None:
                         "checkpoint": checkpoint_filename,
                         "label_names": bundle.label_names,
                         "model_config": model_config,
+                        "global_step": step,
+                        "selection_metric": selection_metric_name,
                     },
                     indent=2,
                 ),
@@ -447,12 +467,28 @@ def main() -> None:
                 "train_per_class_f1": train_metrics["per_class_f1"],
                 "validation_per_class_f1": val_metrics["per_class_f1"],
             }
-    (results_dir / "training_history.json").write_text(json.dumps(history, indent=2), encoding="utf-8")
+
+    for epoch in range(total_epochs):
+        train_metrics = train_epoch(
+            model,
+            bundle.loaders["train"],
+            optimizer,
+            device,
+            balance_factor,
+            epoch + 1,
+            total_epochs,
+            config,
+            label_names=bundle.label_names,
+            initial_step=global_step,
+            on_evaluate=record_validation,
+        )
+        global_step += len(bundle.loaders["train"])
+        if config["training"].get("eval_frequency") is None:
+            record_validation(train_metrics, epoch + 1, global_step)
     if best_record is None:
         raise RuntimeError("Training produced no checkpoint; set training.epochs to at least 1.")
     best_checkpoint_path = checkpoint_dir / checkpoint_filename
     model.load_state_dict(load_file(str(best_checkpoint_path), device=str(device)))
-    test_metrics = evaluate(model, bundle.loaders["test"], device, label_names=bundle.label_names)
     routing_diagnostics = {}
     model_diagnostics = {}
     if config.get("diagnostics", {}).get("collect_model_diagnostics", False):
@@ -472,14 +508,14 @@ def main() -> None:
         model.eval()
         with torch.no_grad():
             for batch in bundle.loaders["validation"]:
-                input_ids = batch["input_ids"].to(device)
-                attention_mask = batch["attention_mask"].to(device)
-                standardize_model_output(model(input_ids, attention_mask))
+                standardize_model_output(model(**model_inputs_from_batch(batch, device)))
                 break
         routing_diagnostics = collect_routing_diagnostics(model)
     run_metrics = {
         "run_id": run_id,
         "best_epoch": best_record["epoch"],
+        "best_global_step": best_record["global_step"],
+        "selection_metric": selection_metric_name,
         "routing_diagnostics": routing_diagnostics,
         "model_diagnostics": model_diagnostics,
         "label_names": bundle.label_names,
@@ -490,6 +526,7 @@ def main() -> None:
             "balance_loss": best_record["train_balance_loss"],
             "dynamic_loss": best_record["train_dynamic_loss"],
             "auxiliary_loss": best_record["train_auxiliary_loss"],
+            "weighted_auxiliary_loss": best_record["train_weighted_auxiliary_loss"],
             "accuracy": best_record["train_accuracy"],
             "macro_f1": best_record["train_macro_f1"],
             "weighted_f1": best_record["train_weighted_f1"],
@@ -502,26 +539,13 @@ def main() -> None:
             "weighted_f1": best_record["validation_weighted_f1"],
             "per_class_f1": best_record.get("validation_per_class_f1", {}),
         },
-        "test": {
-            "loss": test_metrics["loss"],
-            "accuracy": test_metrics["accuracy"],
-            "macro_f1": test_metrics["macro_f1"],
-            "weighted_f1": test_metrics["weighted_f1"],
-            "per_class_f1": test_metrics["per_class_f1"],
-        },
     }
     (results_dir / "run_metrics.json").write_text(
         json.dumps(run_metrics, indent=2), encoding="utf-8"
     )
     print(json.dumps(run_metrics, indent=2))
     if wandb_run is not None:
-        wandb_run.log({
-            "best_epoch": best_record["epoch"],
-            "test_loss": test_metrics["loss"],
-            "test_accuracy": test_metrics["accuracy"],
-            "test_macro_f1": test_metrics["macro_f1"],
-            "test_weighted_f1": test_metrics["weighted_f1"],
-        })
+        wandb_run.log({"best_epoch": best_record["epoch"]})
     (checkpoint_root / "latest_run.json").write_text(json.dumps({"run_id": run_id, "checkpoint": str(best_checkpoint_path)}, indent=2), encoding="utf-8")
     (results_root / "latest_run.json").write_text(json.dumps({"run_id": run_id, "results_dir": str(results_dir)}, indent=2), encoding="utf-8")
     if wandb_run is not None:

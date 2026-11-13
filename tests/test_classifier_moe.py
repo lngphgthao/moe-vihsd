@@ -1,4 +1,4 @@
-"""Unit and smoke tests for Classifier-MoE module and architecture."""
+"""Unit test và smoke test cho module và architecture Classifier-MoE."""
 
 import unittest
 import torch
@@ -36,7 +36,7 @@ class DummyBackbone(nn.Module):
 
 
 class TestClassifierMoE(unittest.TestCase):
-    """Test suite verifying tensor shapes, routing, loss computation, and forward/backward passes."""
+    """Test shape tensor, routing, tính loss và forward/backward pass."""
 
     def setUp(self):
         set_seed(42)
@@ -50,14 +50,14 @@ class TestClassifierMoE(unittest.TestCase):
         self.load_balance_loss_coef = 0.01
 
     def test_expert_architecture(self):
-        """Test that ClassifierMoEExpert is a 2-layer MLP: Linear -> activation -> dropout -> Linear."""
+        """Kiểm tra ClassifierMoEExpert là MLP hai layer: Linear -> activation -> dropout -> Linear."""
         expert = ClassifierMoEExpert(
             input_dim=self.input_dim,
             hidden_dim=self.expert_hidden_dim,
             dropout=self.dropout,
             activation="gelu",
         )
-        # Verify network structure
+        # Kiểm tra cấu trúc network.
         self.assertEqual(len(expert.net), 4)
         self.assertIsInstance(expert.net[0], nn.Linear)
         self.assertEqual(expert.net[0].in_features, self.input_dim)
@@ -72,13 +72,13 @@ class TestClassifierMoE(unittest.TestCase):
         self.assertEqual(expert.net[3].in_features, self.expert_hidden_dim)
         self.assertEqual(expert.net[3].out_features, self.input_dim)
 
-        # Test forward pass shape
+        # Kiểm tra shape của forward pass.
         x = torch.randn(self.batch_size, self.input_dim)
         out = expert(x)
         self.assertEqual(out.shape, (self.batch_size, self.input_dim))
 
     def test_head_tensor_shapes_and_routing(self):
-        """Verify output tensor shapes, normalized top-k routing weights, and auxiliary loss."""
+        """Kiểm tra shape output, top-k routing weight chuẩn hóa và auxiliary loss."""
         head = ClassifierMoEHead(
             input_dim=self.input_dim,
             num_labels=self.num_labels,
@@ -94,7 +94,7 @@ class TestClassifierMoE(unittest.TestCase):
         h = torch.randn(self.batch_size, self.input_dim)
         logits, aux = head(h)
 
-        # Verify shapes
+        # Kiểm tra shape.
         self.assertEqual(logits.shape, (self.batch_size, self.num_labels))
         self.assertIn("balance_loss", aux)
         self.assertIn("top_indices", aux)
@@ -109,21 +109,21 @@ class TestClassifierMoE(unittest.TestCase):
         self.assertEqual(weights.shape, (self.batch_size, self.top_k))
         self.assertEqual(probabilities.shape, (self.batch_size, self.num_experts))
 
-        # Check expert indices are valid
+        # Kiểm tra expert index hợp lệ.
         self.assertTrue((top_indices >= 0).all())
         self.assertTrue((top_indices < self.num_experts).all())
 
-        # Check weights are positive and sum to 1 across top-k for each example
+        # Kiểm tra weight dương và tổng trên top-k bằng 1 cho mỗi example.
         weights_sum = weights.sum(dim=-1)
         torch.testing.assert_close(weights_sum, torch.ones_like(weights_sum), rtol=1e-5, atol=1e-5)
 
-        # Check balance loss is non-negative scalar
+        # Kiểm tra balance loss là scalar không âm.
         balance_loss = aux["balance_loss"]
         self.assertEqual(balance_loss.dim(), 0)
         self.assertTrue(balance_loss.item() >= 0.0)
 
     def test_head_forward_backward(self):
-        """Verify forward and backward gradients flow through experts, router, and classifier."""
+        """Kiểm tra gradient forward và backward đi qua expert, router và classifier."""
         head = ClassifierMoEHead(
             input_dim=self.input_dim,
             num_labels=self.num_labels,
@@ -145,19 +145,19 @@ class TestClassifierMoE(unittest.TestCase):
 
         total_loss.backward()
 
-        # Gradients must exist on input
+        # Input phải có gradient.
         self.assertIsNotNone(h.grad)
         self.assertFalse(torch.isnan(h.grad).any())
 
-        # Gradients must exist on router projection
+        # Router projection phải có gradient.
         self.assertIsNotNone(head.router.projection.weight.grad)
         self.assertFalse(torch.isnan(head.router.projection.weight.grad).any())
 
-        # Gradients must exist on final classifier
+        # Classifier cuối phải có gradient.
         self.assertIsNotNone(head.classifier.weight.grad)
         self.assertFalse(torch.isnan(head.classifier.weight.grad).any())
 
-        # At least the selected experts should have received gradients
+        # Ít nhất các expert được chọn phải nhận gradient.
         expert_has_grad = any(
             expert.net[0].weight.grad is not None and not torch.isnan(expert.net[0].weight.grad).any()
             for expert in head.experts
@@ -165,8 +165,8 @@ class TestClassifierMoE(unittest.TestCase):
         self.assertTrue(expert_has_grad)
 
     def test_configurable_options(self):
-        """Verify shared_expert, use_residual, and routing parameters."""
-        # 1. shared_expert=True
+        """Kiểm tra parameter shared_expert, use_residual và routing."""
+        # 1. shared_expert=True.
         head_shared = ClassifierMoEHead(
             input_dim=self.input_dim,
             num_labels=self.num_labels,
@@ -183,7 +183,7 @@ class TestClassifierMoE(unittest.TestCase):
         logits.sum().backward()
         self.assertIsNotNone(head_shared.shared_expert.net[0].weight.grad)
 
-        # 2. use_residual=True
+        # 2. use_residual=True.
         head_res = ClassifierMoEHead(
             input_dim=self.input_dim,
             num_labels=self.num_labels,
@@ -196,7 +196,7 @@ class TestClassifierMoE(unittest.TestCase):
         logits, aux = head_res(h)
         self.assertEqual(logits.shape, (self.batch_size, self.num_labels))
 
-        # 3. top_k = 1
+        # 3. top_k = 1.
         head_top1 = ClassifierMoEHead(
             input_dim=self.input_dim,
             num_labels=self.num_labels,
@@ -206,7 +206,7 @@ class TestClassifierMoE(unittest.TestCase):
         logits, aux = head_top1(h)
         self.assertEqual(aux["top_indices"].shape, (self.batch_size, 1))
 
-        # 4. Invalid top_k > num_experts raises ValueError
+        # 4. top_k > num_experts không hợp lệ và phải raise ValueError.
         with self.assertRaises(ValueError):
             ClassifierMoEHead(
                 input_dim=self.input_dim,
@@ -215,7 +215,7 @@ class TestClassifierMoE(unittest.TestCase):
                 top_k=3,
             )
 
-        # 5. Invalid num_experts < 1 raises ValueError
+        # 5. num_experts < 1 không hợp lệ và phải raise ValueError.
         with self.assertRaises(ValueError):
             ClassifierMoEHead(
                 input_dim=self.input_dim,
@@ -225,7 +225,7 @@ class TestClassifierMoE(unittest.TestCase):
             )
 
     def test_full_model_with_dummy_backbone(self):
-        """Smoke test full ClassifierMoEClassifier forward pass, pooling, and backward step."""
+        """Smoke test forward, pooling và backward step của ClassifierMoEClassifier."""
         config = {
             "architecture": "classifier_moe",
             "pretrained_model_name": "dummy",
@@ -239,13 +239,13 @@ class TestClassifierMoE(unittest.TestCase):
             "use_residual": False,
         }
 
-        # Monkey-patch load_backbone to return DummyBackbone
+        # Monkey-patch load_backbone để trả về DummyBackbone.
         import src.models.classifier_moe as cm_module
         orig_load = cm_module.load_backbone
         try:
             cm_module.load_backbone = lambda name: DummyBackbone(hidden_size=64)
 
-            # Test CLS pooling
+            # Kiểm tra CLS pooling.
             model = ClassifierMoEClassifier(vocab_size=100, num_labels=3, config=config)
             input_ids = torch.randint(0, 100, (4, 16))
             attention_mask = torch.ones(4, 16, dtype=torch.long)
@@ -259,13 +259,13 @@ class TestClassifierMoE(unittest.TestCase):
             loss.backward()
             optimizer.step()
 
-            # Test Mean pooling
+            # Kiểm tra mean pooling.
             config_mean = {**config, "pooling": "mean"}
             model_mean = ClassifierMoEClassifier(vocab_size=100, num_labels=3, config=config_mean)
             logits_mean, aux_mean = standardize_model_output(model_mean(input_ids, attention_mask))
             self.assertEqual(logits_mean.shape, (4, 3))
 
-            # Test factory build_model
+            # Kiểm tra factory build_model.
             from src.models.factory import build_model
             factory_model = build_model(config, vocab_size=100, num_labels=3)
             self.assertIsInstance(factory_model, ClassifierMoEClassifier)
@@ -276,7 +276,7 @@ class TestClassifierMoE(unittest.TestCase):
             cm_module.load_backbone = orig_load
 
     def test_reproducibility(self):
-        """Verify that identical seeds produce identical model initialization and outputs."""
+        """Kiểm tra seed giống nhau tạo initialization và output giống nhau."""
         set_seed(123)
         head1 = ClassifierMoEHead(
             input_dim=self.input_dim,

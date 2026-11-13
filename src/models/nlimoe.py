@@ -1,21 +1,21 @@
-"""Sequence-level dynamic-threshold MoE classifier inspired by NLIMoE.
+"""Classifier MoE dynamic-threshold theo sequence, lấy cảm hứng từ NLIMoE.
 
-Supports two routing strategies selectable via ``model.routing_type``:
+Hỗ trợ hai routing strategy, chọn qua ``model.routing_type``:
 
-* ``"dynamic"`` (default) – learned per-input dynamic-threshold routing as in
-  NLIMoEDynamic.  A complexity gate adjusts the activation threshold per
-  example; experts whose softmax probability exceeds the threshold are active.
-  Reports both ``dynamic_loss`` (entropy regulariser) and ``balance_loss``
-  (load-balance penalty) in the aux dict.
+* ``"dynamic"`` (mặc định): dynamic-threshold routing học theo input như
+  NLIMoEDynamic. Complexity gate điều chỉnh activation threshold cho từng
+  example; expert có softmax probability vượt threshold sẽ active. Ghi cả
+  ``dynamic_loss`` (entropy regulariser) và ``balance_loss`` (load-balance
+  penalty) vào aux dict.
 
-* ``"top_k"`` – selects exactly the top-``model.dynamic_top_k`` experts per
-  example by softmax probability, as in NLIMoETopK.  The complexity gate and
-  dynamic threshold are not used.  Reports only ``balance_loss`` in the aux
-  dict (``dynamic_loss`` is 0.0).
+* ``"top_k"``: chọn đúng top-``model.dynamic_top_k`` expert cho mỗi example
+  theo softmax probability như NLIMoETopK. Không dùng complexity gate và
+  dynamic threshold. Chỉ ghi ``balance_loss`` vào aux dict, còn
+  ``dynamic_loss`` bằng 0.0.
 
-All other components (shared encoder, square single-layer FFN experts, mean
-pooling, LayerNorm, linear classifier) are identical across both routing types,
-so experiments isolate the routing choice.
+Các component còn lại, gồm shared encoder, single-layer FFN expert dạng square,
+mean pooling, LayerNorm và linear classifier, giống nhau ở cả hai routing type.
+Nhờ đó experiment cô lập được ảnh hưởng của routing.
 """
 
 from __future__ import annotations
@@ -28,14 +28,16 @@ from src.models.backbone import load_backbone
 
 
 class NLIMoEClassifier(nn.Module):
-    """Mean-pool a shared encoder, then route each example by a learned threshold or top-k."""
+    """Mean-pool shared encoder, rồi route từng example bằng threshold hoặc top-k."""
 
     def __init__(self, vocab_size: int, num_labels: int, config: dict) -> None:
         super().__init__()
         self.model_name = config.get("pretrained_model_name")
         if not self.model_name:
             raise ValueError("model.pretrained_model_name is required for nlimoe")
-        self.backbone = load_backbone(self.model_name)
+        self.backbone = load_backbone(
+            self.model_name, revision=config.get("pretrained_model_revision")
+        )
         hidden_size = int(self.backbone.config.hidden_size)
         self.num_experts = int(config.get("dynamic_num_experts", 7))
         if self.num_experts < 1:
@@ -56,7 +58,7 @@ class NLIMoEClassifier(nn.Module):
                     f"model.dynamic_num_experts ({self.num_experts})"
                 )
         else:
-            # dynamic-threshold parameters
+            # Tham số dynamic-threshold.
             self.static_threshold = float(config.get("dynamic_static_threshold", 0.1))
             self.threshold_scale = float(config.get("dynamic_threshold_scale", 0.1))
             self.threshold_temperature = float(config.get("dynamic_threshold_temperature", 0.02))
@@ -79,7 +81,7 @@ class NLIMoEClassifier(nn.Module):
             ) for _ in range(self.num_experts)]
         )
         self.layer_norm = nn.LayerNorm(hidden_size)
-        self.dropout = nn.Dropout(nlimoe_expert_dropout)
+        self.dropout = nn.Dropout(float(config.get("classifier_dropout", nlimoe_expert_dropout)))
         self.classifier = nn.Linear(hidden_size, num_labels)
         self.last_routing_info: dict[str, torch.Tensor] = {}
         if bool(config.get("freeze_backbone", False)):
@@ -87,25 +89,25 @@ class NLIMoEClassifier(nn.Module):
                 parameter.requires_grad = False
 
     # ------------------------------------------------------------------
-    # Routing helpers
+    # Helper cho routing.
     # ------------------------------------------------------------------
 
     def _route_dynamic(
         self, pooled: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, dict]:
-        """Dynamic-threshold routing.  Returns (weights, selected mask, probabilities, info)."""
+        """Dynamic-threshold routing, trả về weights, mask, probabilities và info."""
         probabilities = F.softmax(self.router(pooled), dim=-1)
         complexity = torch.sigmoid(self.complexity_gate(pooled))
         threshold = self.static_threshold + self.threshold_scale * complexity
         selected = probabilities > threshold
-        # Guarantee at least one expert per example.
+        # Bài không mô tả mask rỗng; giữ argmax fallback và cần đối chiếu author code.
         empty = ~selected.any(dim=-1)
         if empty.any():
             selected[empty, probabilities[empty].argmax(dim=-1)] = True
 
         temperature = float(self.threshold_temperature)
         soft_selected = torch.sigmoid((probabilities - threshold) / temperature)
-        # Straight-through: hard mask in forward, soft gradient for threshold learning.
+        # Bài không mô tả gradient threshold; cần đối chiếu straight-through estimator với author code.
         selected_st = selected.to(probabilities.dtype) + soft_selected - soft_selected.detach()
         weights = probabilities * selected_st
         weights = weights / weights.sum(dim=-1, keepdim=True).clamp_min(1e-9)
@@ -121,12 +123,12 @@ class NLIMoEClassifier(nn.Module):
     def _route_top_k(
         self, pooled: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, dict]:
-        """Top-k routing.  Returns (weights, selected mask, probabilities, info)."""
+        """Top-k routing, trả về weights, mask, probabilities và info."""
         probabilities = F.softmax(self.router(pooled), dim=-1)
         top_vals, top_idx = torch.topk(probabilities, self.top_k, dim=-1)
         selected = torch.zeros_like(probabilities, dtype=torch.bool)
         selected.scatter_(1, top_idx, True)
-        # Normalise only over selected experts.
+        # Chỉ chuẩn hóa trên các expert được chọn.
         masked_probs = probabilities * selected.to(probabilities.dtype)
         weights = masked_probs / masked_probs.sum(dim=-1, keepdim=True).clamp_min(1e-9)
 
@@ -138,11 +140,12 @@ class NLIMoEClassifier(nn.Module):
         return weights, selected, probabilities, info
 
     # ------------------------------------------------------------------
-    # Forward
+    # Forward.
     # ------------------------------------------------------------------
 
-    def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor):
-        hidden = self.backbone(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
+    def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor, token_type_ids: torch.Tensor | None = None):
+        segment_inputs = {} if token_type_ids is None else {"token_type_ids": token_type_ids}
+        hidden = self.backbone(input_ids=input_ids, attention_mask=attention_mask, **segment_inputs).last_hidden_state
         mask = attention_mask.unsqueeze(-1).to(hidden.dtype)
         pooled = (hidden * mask).sum(dim=1) / mask.sum(dim=1).clamp_min(1.0)
 
@@ -160,9 +163,9 @@ class NLIMoEClassifier(nn.Module):
 
         logits = self.classifier(self.dropout(self.layer_norm(routed)))
 
-        # Auxiliary losses
-        # Entropy regulariser (dynamic loss): encourages focused expert selection.
-        # Skipped for top_k routing since selection is already deterministically sparse.
+        # Auxiliary loss.
+        # Entropy regulariser (dynamic loss) khuyến khích chọn expert tập trung.
+        # Bỏ qua với top_k vì selection đã sparse một cách deterministic.
         if self.routing_type == "dynamic":
             dynamic_loss = (
                 -(probabilities * probabilities.clamp_min(1e-9).log()).sum(dim=-1).mean()
@@ -171,7 +174,7 @@ class NLIMoEClassifier(nn.Module):
         else:
             dynamic_loss = torch.zeros(1, device=pooled.device, dtype=pooled.dtype).squeeze()
 
-        # Load-balance loss: penalises uneven expert utilisation across the batch.
+        # Load-balance loss phạt mức sử dụng expert không đều trong batch.
         load = selected.to(probabilities.dtype).mean(dim=0)
         importance = probabilities.mean(dim=0)
         balance_loss = self.num_experts * torch.sum(load * importance)

@@ -1,4 +1,4 @@
-"""Reusable sequence-level dynamic/top-k MoE head."""
+"""Dynamic/top-k MoE head theo sequence, có thể tái sử dụng."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import torch.nn.functional as F
 
 
 class DynamicMoEHead(nn.Module):
-    """Route a pooled representation through dynamic-threshold or top-k experts."""
+    """Route pooled representation qua dynamic-threshold hoặc top-k expert."""
 
     def __init__(self, input_dim: int, num_labels: int, config: dict) -> None:
         super().__init__()

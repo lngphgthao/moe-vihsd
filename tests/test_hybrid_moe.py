@@ -1,4 +1,4 @@
-"""Tests for the Hybrid-MoE composition and routing contracts."""
+"""Test composition và routing contract của Hybrid-MoE."""
 
 import unittest
 

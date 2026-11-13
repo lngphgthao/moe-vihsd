@@ -1,4 +1,4 @@
-"""CLI entry point for generalized experiment aggregation."""
+"""Entry point CLI để aggregate experiment tổng quát."""
 
 import sys
 from pathlib import Path

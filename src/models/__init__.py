@@ -1,4 +1,4 @@
-"""Model implementations for the supported training architectures."""
+"""Implementation model cho các training architecture được hỗ trợ."""
 
 from src.models.classifier_moe import (
     ClassifierMoEClassifier,

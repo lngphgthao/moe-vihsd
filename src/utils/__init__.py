@@ -1,4 +1,4 @@
-"""Configuration, reproducibility, and run utilities."""
+"""Tiện ích config, reproducibility và quản lý run."""
 
 from src.utils.config import (
     apply_overrides,

@@ -1,0 +1,24 @@
+dataset: ViHSD
+source:
+  name: "Local segmented DatasetDict configured as data/vihsd_segmented"
+  type: local_preprocessed
+  revision: null
+  access: "Create or restore the segmented DatasetDict outside Git before training."
+splits:
+  train: null
+  validation: null
+  test: null
+schema:
+  input_mode: single
+  text_column: free_text
+  label_column: label_id
+  labels: null
+preprocessing:
+  tokenizer: vinai/phobert-base
+  tokenizer_revision: null
+  max_length: 128
+  segmentation: "Prepared segmented text; the source revision and checksum were not recorded in the historical artifact."
+verification:
+  expected_split_sizes_checked_by: src/data/loader.py
+  checksum: null
+  notes: "Populate source revision, split sizes, and checksum when the external dataset artifact is revalidated."

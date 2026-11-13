@@ -1,7 +1,7 @@
-"""Classifier-level Mixture of Experts (Classifier-MoE) module.
+"""Module Mixture of Experts ở classifier level (Classifier-MoE).
 
-This module keeps the Transformer encoder backbone completely dense and replaces
-the classification head with a sparse Mixture of Experts (MoE) network.
+Module này giữ Transformer encoder backbone ở dạng dense và thay classification
+head bằng mạng Mixture of Experts (MoE) sparse.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from src.models.moe.router import TopKRouter
 
 
 class ClassifierMoEExpert(nn.Module):
-    """2-layer MLP expert: Linear -> activation -> dropout -> Linear."""
+    """Expert MLP hai layer: Linear -> activation -> dropout -> Linear."""
 
     def __init__(
         self,
@@ -54,15 +54,15 @@ class ClassifierMoEExpert(nn.Module):
 
 
 class ClassifierMoEHead(nn.Module):
-    """Classifier-MoE routing head.
+    """Routing head của Classifier-MoE.
 
-    1. Router receives representation h and computes expert routing scores.
-    2. Uses top-k routing to select k experts per example.
-    3. Dispatches tokens/examples to N independent 2-layer MLP experts.
-    4. Combines selected expert outputs with normalized routing weights.
-    5. Optionally combines with a shared expert and/or residual connection.
-    6. Feeds the combined representation into a final linear classification layer.
-    7. Computes auxiliary load-balancing loss.
+    1. Router nhận representation h và tính routing score của expert.
+    2. Dùng top-k routing để chọn k expert cho mỗi example.
+    3. Phân phối token/example tới N expert MLP hai layer độc lập.
+    4. Kết hợp output được chọn bằng routing weight đã chuẩn hóa.
+    5. Có thể kết hợp thêm shared expert và/hoặc residual connection.
+    6. Đưa representation kết hợp vào linear classification layer cuối.
+    7. Tính auxiliary load-balancing loss.
     """
 
     def __init__(
@@ -128,14 +128,14 @@ class ClassifierMoEHead(nn.Module):
         self.last_routing_info: dict[str, Any] = {}
 
     def forward(self, h: torch.Tensor) -> tuple[torch.Tensor, dict[str, Any]]:
-        """Forward pass through Classifier-MoE head.
+        """Thực hiện forward pass qua Classifier-MoE head.
 
         Args:
-            h: Pooled representation tensor of shape (batch_size, input_dim).
+            h: Pooled representation tensor có shape (batch_size, input_dim).
 
         Returns:
-            logits: Classification logits of shape (batch_size, num_labels).
-            aux: Dictionary containing auxiliary losses and routing metrics.
+            logits: Classification logits có shape (batch_size, num_labels).
+            aux: Dictionary chứa auxiliary loss và routing metric.
         """
         weights, top_indices, probabilities = self.router(h)
 
@@ -180,7 +180,7 @@ class ClassifierMoEHead(nn.Module):
 
 
 class ClassifierMoEClassifier(nn.Module):
-    """Dense Transformer encoder backbone with a Classifier-MoE classification head."""
+    """Dense Transformer encoder backbone với Classifier-MoE classification head."""
 
     def __init__(self, vocab_size: int, num_labels: int, config: dict) -> None:
         super().__init__()
@@ -233,8 +233,9 @@ class ClassifierMoEClassifier(nn.Module):
     def last_routing_info(self) -> dict[str, Any]:
         return self.classifier_moe.last_routing_info
 
-    def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> tuple[torch.Tensor, dict[str, Any]]:
-        outputs = self.backbone(input_ids=input_ids, attention_mask=attention_mask)
+    def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor, token_type_ids: torch.Tensor | None = None) -> tuple[torch.Tensor, dict[str, Any]]:
+        segment_inputs = {} if token_type_ids is None else {"token_type_ids": token_type_ids}
+        outputs = self.backbone(input_ids=input_ids, attention_mask=attention_mask, **segment_inputs)
         hidden_states = outputs.last_hidden_state
 
         if self.pooling == "cls":

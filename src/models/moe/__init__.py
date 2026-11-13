@@ -1,4 +1,4 @@
-"""Modular Transformer Mixture-of-Experts components."""
+"""Các component Transformer Mixture-of-Experts dạng module."""
 
 from src.models.moe.ffn import Expert
 from src.models.moe.dynamic_head import DynamicMoEHead

@@ -1,4 +1,4 @@
-"""Loss function implementations for ViHSD experiments."""
+"""Implementation loss function cho experiment ViHSD."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import torch.nn.functional as F
 
 
 def compute_task_loss(logits: torch.Tensor, labels: torch.Tensor, config: dict) -> torch.Tensor:
-    """Compute the configured classification loss (cross_entropy, weighted_cross_entropy, focal) for a batch."""
+    """Tính classification loss đã cấu hình cho một batch."""
     training_config = config.get("training", {})
     loss_type = str(training_config.get("loss_type", "cross_entropy")).lower()
     class_weights = training_config.get("class_weights")

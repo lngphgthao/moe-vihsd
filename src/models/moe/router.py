@@ -1,4 +1,4 @@
-"""Top-k router and auxiliary load-balancing loss."""
+"""Top-k router và auxiliary load-balancing loss."""
 
 import torch
 import torch.nn as nn
@@ -6,7 +6,7 @@ import torch.nn.functional as F
 
 
 class TopKRouter(nn.Module):
-    """Routes tokens to the top-k experts and exposes balancing statistics."""
+    """Route token tới top-k expert và cung cấp thống kê cân bằng."""
 
     def __init__(self, input_dim: int, num_experts: int, top_k: int = 1) -> None:
         super().__init__()
@@ -36,7 +36,7 @@ class TopKRouter(nn.Module):
         return weights, top_indices, probabilities
 
     def load_balance_loss(self, probabilities, top_indices):
-        """Penalize unequal probability mass and hard token counts."""
+        """Phạt phân phối probability mass và số token hard không đều."""
         if self.num_experts == 0:
             return torch.tensor(0.0, device=probabilities.device, dtype=probabilities.dtype)
         importance = probabilities.mean(dim=0)
@@ -49,7 +49,7 @@ class TopKRouter(nn.Module):
 
 
 class DynamicThresholdRouter(nn.Module):
-    """Per-token NLIMoE-style router with a learned input-complexity threshold."""
+    """Router kiểu NLIMoE theo token với threshold complexity học được."""
 
     def __init__(self, input_dim: int, num_experts: int, static_threshold: float = 0.1,
                  threshold_scale: float = 0.1, temperature: float = 0.02) -> None:

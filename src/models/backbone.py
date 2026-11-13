@@ -1,4 +1,4 @@
-"""Helpers for loading compatible Hugging Face encoder backbones."""
+"""Helper load các encoder backbone Hugging Face tương thích."""
 
 from __future__ import annotations
 
@@ -7,20 +7,21 @@ from typing import Any
 from transformers import AutoModel
 
 
-def load_backbone(model_name: str) -> Any:
-    """Load a Hugging Face encoder for a dense classifier."""
-    return AutoModel.from_pretrained(model_name)
+def load_backbone(model_name: str, *, revision: str | None = None) -> Any:
+    """Load encoder Hugging Face cho dense classifier."""
+    kwargs = {} if revision is None else {"revision": revision}
+    return AutoModel.from_pretrained(model_name, **kwargs)
 
 
 def load_moe_backbone(model_name: str) -> Any:
-    """Load and validate a backbone whose internal FFNs will be replaced by MoE layers."""
+    """Load và kiểm tra backbone có FFN nội bộ được thay bằng MoE layer."""
     backbone = load_backbone(model_name)
     get_encoder_layers(backbone)
     return backbone
 
 
 def get_encoder_layers(backbone: Any) -> Any:
-    """Return encoder layers for BERT-, RoBERTa-, and XLM-R-style encoders."""
+    """Trả về encoder layer cho encoder kiểu BERT, RoBERTa và XLM-R."""
     encoder = getattr(backbone, "encoder", None)
     layers = getattr(encoder, "layer", None)
     if layers is None:

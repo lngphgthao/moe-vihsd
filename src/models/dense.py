@@ -1,4 +1,4 @@
-"""Generic dense Hugging Face encoder classifier."""
+"""Dense classifier tổng quát dùng encoder Hugging Face."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from src.models.backbone import load_backbone
 
 
 class DenseTransformerClassifier(nn.Module):
-    """Fine-tune a pretrained encoder with a linear sequence classifier."""
+    """Fine-tune pretrained encoder với linear sequence classifier."""
 
     def __init__(self, vocab_size: int, num_labels: int, config: dict) -> None:
         super().__init__()
@@ -27,8 +27,9 @@ class DenseTransformerClassifier(nn.Module):
         self.classifier_dropout = nn.Dropout(classifier_dropout)
         self.classifier = nn.Linear(self.backbone.config.hidden_size, num_labels)
 
-    def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor):
-        outputs = self.backbone(input_ids=input_ids, attention_mask=attention_mask)
+    def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor, token_type_ids: torch.Tensor | None = None):
+        segment_inputs = {} if token_type_ids is None else {"token_type_ids": token_type_ids}
+        outputs = self.backbone(input_ids=input_ids, attention_mask=attention_mask, **segment_inputs)
         hidden_states = outputs.last_hidden_state
         if self.pooling == "cls":
             pooled = hidden_states[:, 0]

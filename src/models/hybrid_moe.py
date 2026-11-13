@@ -1,4 +1,4 @@
-"""Hybrid Transformer-MoE encoder followed by a Classifier-MoE head."""
+"""Transformer-MoE encoder kết hợp Classifier-MoE head."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from src.models.moe.dynamic_head import DynamicMoEHead
 
 
 class HybridMoEClassifier(nn.Module):
-    """Route inside selected Transformer layers, then route the pooled representation."""
+    """Route trong Transformer layer được chọn, rồi route representation đã pool."""
 
     def __init__(self, vocab_size: int, num_labels: int, config: dict) -> None:
         super().__init__()
@@ -111,8 +111,9 @@ class HybridMoEClassifier(nn.Module):
                     for parameter in layer.output.parameters():
                         parameter.requires_grad = False
 
-    def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor):
-        outputs = self.backbone(input_ids=input_ids, attention_mask=attention_mask)
+    def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor, token_type_ids: torch.Tensor | None = None):
+        segment_inputs = {} if token_type_ids is None else {"token_type_ids": token_type_ids}
+        outputs = self.backbone(input_ids=input_ids, attention_mask=attention_mask, **segment_inputs)
         hidden_states = outputs.last_hidden_state
         if self.pooling == "cls":
             pooled = hidden_states[:, 0]

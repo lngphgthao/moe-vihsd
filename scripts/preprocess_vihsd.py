@@ -1,4 +1,4 @@
-"""Preprocess ViHSD dataset with VnCoreNLP word segmentation and cache to disk.
+"""Preprocess ViHSD bằng word segmentation của VnCoreNLP và lưu cache trên disk.
 
 Usage:
     python scripts/preprocess_vihsd.py --output-dir data/vihsd_segmented
@@ -20,7 +20,7 @@ from tqdm import tqdm
 
 
 def ensure_vncorenlp(save_dir: str = "vncorenlp") -> str:
-    """Ensure VnCoreNLP jar and word segmenter model files exist."""
+    """Bảo đảm VnCoreNLP jar và file model word segmenter tồn tại."""
     os.makedirs(os.path.join(save_dir, "models", "wordsegmenter"), exist_ok=True)
     base_url = "https://raw.githubusercontent.com/vncorenlp/VnCoreNLP/master/"
     files = [
@@ -37,15 +37,11 @@ def ensure_vncorenlp(save_dir: str = "vncorenlp") -> str:
 
 
 def segment_text(rdr: VnCoreNLP, text: str) -> str:
-    """Segment Vietnamese text into compound words separated by underscores."""
+    """Segment văn bản tiếng Việt thành các từ ghép nối bằng underscore."""
     if not text or not str(text).strip():
         return ""
-    try:
-        sentences = rdr.tokenize(str(text))
-        return " ".join([" ".join(sent) for sent in sentences])
-    except Exception:
-        # Fallback to original text if tokenizer encounters abnormal string
-        return str(text)
+    sentences = rdr.tokenize(str(text))
+    return " ".join(" ".join(sentence) for sentence in sentences)
 
 
 def main():
@@ -61,39 +57,37 @@ def main():
 
     jar_path = ensure_vncorenlp(args.vncorenlp_dir)
     print("Initializing VnCoreNLP word segmenter...")
-    rdr = VnCoreNLP(jar_path, annotators="wseg", max_heap_size="-Xmx2g")
+    with VnCoreNLP(jar_path, annotators="wseg", max_heap_size="-Xmx2g") as rdr:
+        print(f"Loading raw dataset '{args.dataset_name}'...")
+        raw = load_dataset(args.dataset_name)
 
-    print(f"Loading raw dataset '{args.dataset_name}'...")
-    raw = load_dataset(args.dataset_name)
+        def process_split(split_data, split_name):
+            print(f"Segmenting '{split_name}' split ({len(split_data)} samples)...")
+            segmented_texts = []
+            for text in tqdm(split_data["free_text"], desc=f"Segmenting {split_name}"):
+                segmented_texts.append(segment_text(rdr, text))
 
-    def process_split(split_data, split_name):
-        print(f"Segmenting '{split_name}' split ({len(split_data)} samples)...")
-        segmented_texts = []
-        for text in tqdm(split_data["free_text"], desc=f"Segmenting {split_name}"):
-            segmented_texts.append(segment_text(rdr, text))
-        
-        # Replace free_text column with segmented text, preserve all other columns
-        return split_data.remove_columns(["free_text"]).add_column("free_text", segmented_texts)
+            # Thay column free_text bằng text đã segment, giữ các column còn lại.
+            return split_data.remove_columns(["free_text"]).add_column("free_text", segmented_texts)
 
-    processed_dict = {}
-    for split_name in raw.keys():
-        processed_dict[split_name] = process_split(raw[split_name], split_name)
+        processed_dict = {}
+        for split_name in raw.keys():
+            processed_dict[split_name] = process_split(raw[split_name], split_name)
 
-    from datasets import DatasetDict
-    processed_dataset = DatasetDict(processed_dict)
+        from datasets import DatasetDict
+        processed_dataset = DatasetDict(processed_dict)
 
-    print(f"Saving preprocessed dataset to '{args.output_dir}'...")
-    os.makedirs(args.output_dir, exist_ok=True)
-    processed_dataset.save_to_disk(args.output_dir)
+        print(f"Saving preprocessed dataset to '{args.output_dir}'...")
+        os.makedirs(args.output_dir, exist_ok=True)
+        processed_dataset.save_to_disk(args.output_dir)
 
-    print("\n--- Verification Sample ---")
-    for i in range(min(3, len(raw["train"]))):
-        print(f"Sample {i+1}:")
-        print(f"  Raw:       {raw['train']['free_text'][i]}")
-        print(f"  Segmented: {processed_dataset['train']['free_text'][i]}")
-        print(f"  Label:     {processed_dataset['train']['label_id'][i]}")
+        print("\n--- Verification Sample ---")
+        for i in range(min(3, len(raw["train"]))):
+            print(f"Sample {i+1}:")
+            print(f"  Raw:       {raw['train']['free_text'][i]}")
+            print(f"  Segmented: {processed_dataset['train']['free_text'][i]}")
+            print(f"  Label:     {processed_dataset['train']['label_id'][i]}")
 
-    rdr.close()
     print(f"\n[DONE] Successfully segmented and cached ViHSD to '{args.output_dir}'.")
 
 

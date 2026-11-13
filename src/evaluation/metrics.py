@@ -1,4 +1,4 @@
-"""Classification metric utilities for ViHSD evaluation and training."""
+"""Tiện ích classification metric cho evaluation và training ViHSD."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ def compute_classification_metrics(
     y_pred: Sequence[int] | np.ndarray,
     label_names: Sequence[str] | None = None,
 ) -> dict[str, Any]:
-    """Compute accuracy, macro F1, weighted F1, per-class F1, and report dict."""
+    """Tính accuracy, macro F1, weighted F1, per-class F1 và report dict."""
     y_true_arr = np.asarray(y_true)
     y_pred_arr = np.asarray(y_pred)
 
@@ -27,11 +27,11 @@ def compute_classification_metrics(
         }
 
     acc = float(accuracy_score(y_true_arr, y_pred_arr))
-    macro_f1 = float(f1_score(y_true_arr, y_pred_arr, average="macro", zero_division=0))
+    labels = list(range(len(label_names))) if label_names is not None else sorted(set(y_true_arr) | set(y_pred_arr))
+    macro_f1 = float(f1_score(y_true_arr, y_pred_arr, labels=labels, average="macro", zero_division=0))
     weighted_f1 = float(f1_score(y_true_arr, y_pred_arr, average="weighted", zero_division=0))
 
     target_names = [str(name) for name in label_names] if label_names is not None else None
-    labels = list(range(len(label_names))) if label_names is not None else sorted(set(y_true_arr) | set(y_pred_arr))
 
     per_class_scores = f1_score(y_true_arr, y_pred_arr, labels=labels, average=None, zero_division=0)
     per_class_dict = {
@@ -63,7 +63,7 @@ def format_classification_report(
     label_names: Sequence[str] | None = None,
     digits: int = 4,
 ) -> str:
-    """Return a formatted text classification report table."""
+    """Trả về bảng classification report dạng text đã format."""
     target_names = [str(name) for name in label_names] if label_names is not None else None
     labels = list(range(len(label_names))) if label_names is not None else None
     return classification_report(
@@ -81,7 +81,7 @@ def compute_prediction_diagnostics(
     y_pred: Sequence[int] | np.ndarray,
     label_names: Sequence[str] | None = None,
 ) -> dict[str, Any]:
-    """Return confusion-matrix counts and actual/predicted class distributions."""
+    """Trả về confusion-matrix count và phân phối class thực đoán."""
     y_true_arr = np.asarray(y_true, dtype=int)
     y_pred_arr = np.asarray(y_pred, dtype=int)
     if label_names is not None:

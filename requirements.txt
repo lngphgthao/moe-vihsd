@@ -3,6 +3,8 @@ matplotlib>=3.8
 PyYAML>=6.0
 safetensors>=0.4
 scikit-learn>=1.4
-torch>=2.2
+torch>=2.6
+transformers==5.5.0
 tqdm>=4.66
 wandb>=0.16
+vncorenlp>=1.0.3

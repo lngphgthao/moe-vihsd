@@ -1,9 +1,9 @@
-"""ViHSD/Hugging Face dataset loading and PyTorch DataLoader preparation.
+"""Load dataset ViHSD/Hugging Face và chuẩn bị PyTorch DataLoader.
 
-Supports two input modes controlled by ``dataset.input_mode`` in the config:
-- ``"single"`` (default): single text column → ``tokenizer(text, ...)``
-- ``"nli"``: premise + hypothesis columns → ``tokenizer(premise, hypothesis, ...)``
-  with automatic string-to-int label mapping.
+Hỗ trợ hai input mode, điều khiển bởi ``dataset.input_mode`` trong config:
+- ``"single"`` (mặc định): một text column → ``tokenizer(text, ...)``
+- ``"nli"``: premise + hypothesis column → ``tokenizer(premise, hypothesis, ...)``
+  và tự động map label từ string sang int.
 """
 
 from __future__ import annotations
@@ -17,10 +17,9 @@ from datasets import config as datasets_config
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
 
-# `datasets` checks the optional torchvision VideoReader path even for text-only
-# workloads. Some Colab installs expose torchvision without the required video API,
-# which breaks dataset torch-formatting. Disable that optional branch when it is not
-# available so the text pipeline still works.
+# `datasets` kiểm tra optional torchvision VideoReader kể cả với workload chỉ có text.
+# Một số môi trường Colab có torchvision nhưng thiếu video API cần thiết, làm hỏng
+# torch-formatting của dataset. Tắt nhánh optional này khi API không khả dụng.
 try:
     import torchvision  # noqa: F401
     from torchvision.io import VideoReader  # noqa: F401
@@ -41,21 +40,30 @@ def _ensure_splits(dataset: DatasetDict, config: dict) -> DatasetDict:
     train_name = config["train_split"]
     validation_name = config["validation_split"]
     test_name = config["test_split"]
+    if len({train_name, validation_name, test_name}) != 3:
+        raise ValueError("train_split, validation_split, and test_split must be distinct")
+    for split_name in config.get("expected_split_sizes", {}):
+        if split_name not in dataset:
+            raise ValueError(f"Expected official split '{split_name}' is missing")
+
     if validation_name not in dataset:
         split = dataset[train_name].train_test_split(test_size=0.1, seed=42)
         dataset = DatasetDict({**dataset, train_name: split["train"], validation_name: split["test"]})
     if test_name not in dataset:
-        dataset = DatasetDict({**dataset, test_name: dataset[validation_name]})
+        raise ValueError(
+            f"Required test split '{test_name}' is missing. Refusing to reuse the validation "
+            "split as test data; provide an independent test split."
+        )
     return dataset
 
 
 def _label_info(dataset, label_column: str, label_names_override: list[str] | None = None) -> tuple[list[str], dict[Any, int]]:
-    """Return (label_names, label_to_id mapping).
+    """Trả về (label_names, label_to_id mapping).
 
-    Priority:
-    1. ``label_names_override`` from config (used for NLI string labels)
-    2. HuggingFace ``ClassLabel`` feature
-    3. Auto-sorted unique values in the column
+    Thứ tự ưu tiên:
+    1. ``label_names_override`` từ config, dùng cho NLI string label.
+    2. Feature ``ClassLabel`` của HuggingFace.
+    3. Unique value trong column sau khi sort.
     """
     if label_names_override:
         label_to_id = {name: idx for idx, name in enumerate(label_names_override)}
@@ -68,32 +76,32 @@ def _label_info(dataset, label_column: str, label_names_override: list[str] | No
 
 
 def _load_raw(config: dict) -> DatasetDict:
-    """Load the raw dataset from disk or HuggingFace Hub.
+    """Load raw dataset từ disk hoặc HuggingFace Hub.
 
-    For ViHSD, the segmented on-disk copy is preferred (data/vihsd_segmented).
-    For HuggingFace Hub datasets (e.g. uitnlp/ViANLI), loading from disk is
-    skipped and the dataset is fetched from the Hub directly.
+    Với ViHSD, ưu tiên bản segmented trên disk (data/vihsd_segmented).
+    Với dataset từ HuggingFace Hub, ví dụ uitnlp/ViANLI, load trực tiếp từ Hub
+    khi không có DatasetDict local.
     """
     import os
     from pathlib import Path
 
     dataset_name = config["name"]
 
-    # --- Local disk paths (used for pre-segmented copies) ---
-    # Try the exact name as a directory first (works if it is a local path like
-    # "data/vihsd_segmented" or "data/vianli_segmented").
+    # --- Local disk path, dùng cho bản copy đã segment ---
+    # Thử chính xác dataset name trước, nếu đó là local path như
+    # "data/vihsd_segmented" hoặc "data/vianli_segmented".
     if os.path.isdir(dataset_name):
         from datasets import load_from_disk
         print(f"Loading preprocessed dataset from '{dataset_name}'...")
         return load_from_disk(dataset_name)
 
-    # Legacy fallback paths for ViHSD on Kaggle / local
+    # Legacy fallback path cho ViHSD trên Kaggle hoặc local.
     kaggle_path = "/kaggle/input/vihsd-segmented"
     local_path = "data/vihsd_segmented"
     repo_path = str(Path(__file__).resolve().parent.parent / "data" / "vihsd_segmented")
 
-    # Only apply the ViHSD-specific fallback when the config actually targets
-    # the ViHSD segmented dataset (avoid accidentally loading the wrong data).
+    # Chỉ dùng fallback riêng cho ViHSD khi config thực sự trỏ tới dataset
+    # ViHSD segmented, tránh load nhầm dữ liệu.
     if "vihsd" in dataset_name.lower():
         for path in [local_path, repo_path, kaggle_path]:
             if os.path.isdir(path):
@@ -104,6 +112,8 @@ def _load_raw(config: dict) -> DatasetDict:
     # --- HuggingFace Hub ---
     dataset_config = config.get("config")
     kwargs = {} if dataset_config is None else {"name": dataset_config}
+    if config.get("revision") is not None:
+        kwargs["revision"] = config["revision"]
     print(f"Loading dataset '{dataset_name}' from HuggingFace Hub...")
     return load_dataset(dataset_name, **kwargs)
 
@@ -117,9 +127,9 @@ def prepare_data(config: dict) -> DatasetBundle:
     raw = _ensure_splits(raw, config)
 
     label_column = config["label_column"]
-    label_names_override = config.get("label_names")  # list of strings for NLI
+    label_names_override = config.get("label_names")  # list string label cho NLI.
 
-    # --- Validate columns exist ---
+    # --- Kiểm tra column tồn tại ---
     train_columns = raw[config["train_split"]].column_names
     if label_column not in train_columns:
         raise KeyError(f"Label column {label_column!r} not found in {train_columns}")
@@ -134,7 +144,7 @@ def prepare_data(config: dict) -> DatasetBundle:
             if col not in train_columns:
                 raise KeyError(f"NLI column {col!r} not found in {train_columns}")
 
-    # --- Filter missing texts ---
+    # --- Lọc text bị thiếu ---
     if input_mode == "single":
         raw = raw.filter(
             lambda example: example[text_column] is not None,
@@ -146,10 +156,20 @@ def prepare_data(config: dict) -> DatasetBundle:
             desc="Removing examples with missing premise/hypothesis",
         )
 
+    for split_name, expected_size in config.get("expected_split_sizes", {}).items():
+        if len(raw[split_name]) != expected_size:
+            raise ValueError(
+                f"Expected {expected_size} examples in '{split_name}' after filtering, "
+                f"got {len(raw[split_name])}"
+            )
+
     label_names, label_to_id = _label_info(
         raw[config["train_split"]], label_column, label_names_override
     )
-    tokenizer = AutoTokenizer.from_pretrained(config["tokenizer"])
+    tokenizer_kwargs = {}
+    if config.get("tokenizer_revision") is not None:
+        tokenizer_kwargs["revision"] = config["tokenizer_revision"]
+    tokenizer = AutoTokenizer.from_pretrained(config["tokenizer"], **tokenizer_kwargs)
 
     # --- Tokenization ---
     if input_mode == "single":
@@ -164,7 +184,7 @@ def prepare_data(config: dict) -> DatasetBundle:
             return encoded
     else:
         def tokenize(batch):
-            # Produces [CLS] premise [SEP] hypothesis [SEP] automatically.
+            # Tự động tạo [CLS] premise [SEP] hypothesis [SEP].
             encoded = tokenizer(
                 batch[premise_column],
                 batch[hypothesis_column],
@@ -183,6 +203,8 @@ def prepare_data(config: dict) -> DatasetBundle:
         desc="Tokenizing dataset",
     )
     keep_columns = ["input_ids", "attention_mask", "labels"]
+    if "token_type_ids" in tokenized[config["train_split"]].column_names:
+        keep_columns.append("token_type_ids")
     tokenized.set_format(type="torch", columns=keep_columns)
 
     limit = config.get("max_train_samples")

@@ -1,4 +1,4 @@
-"""True token-level Mixture of Experts Transformer for BERT-family backbones."""
+"""Transformer Mixture of Experts token-level cho BERT-family backbone."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from src.models.moe.router import DynamicThresholdRouter, TopKRouter
 
 
 class TransformerMoELayer(nn.Module):
-    """Replaces a standard BERT-family layer's FFN with a token-level MoE block."""
+    """Thay FFN của BERT-family layer bằng token-level MoE block."""
 
     def __init__(
         self,
@@ -35,7 +35,7 @@ class TransformerMoELayer(nn.Module):
         dynamic_threshold_temperature: float = 0.02,
     ) -> None:
         super().__init__()
-        # Preserve original self-attention module
+        # Giữ nguyên self-attention module ban đầu.
         self.attention = original_layer.attention
 
         hidden_size = original_layer.intermediate.dense.in_features
@@ -72,7 +72,8 @@ class TransformerMoELayer(nn.Module):
             )
 
             if upcycle:
-                # MoE Upcycling: clone pretrained intermediate and output projection weights to all experts
+                # MoE Upcycling: clone weight pretrained của intermediate và output projection
+                # vào toàn bộ expert.
                 for expert in self.experts:
                     expert.upcycle_from_ffn(
                         original_layer.intermediate.dense,
@@ -96,7 +97,7 @@ class TransformerMoELayer(nn.Module):
         else:
             self.shared_expert = None
 
-        # Preserve original output dropout and LayerNorm
+        # Giữ nguyên output dropout và LayerNorm ban đầu.
         self.dropout = nn.Dropout(float(dropout))
         self.LayerNorm = copy.deepcopy(original_layer.output.LayerNorm)
         if learnable_residual_scale:
@@ -107,11 +108,11 @@ class TransformerMoELayer(nn.Module):
                 torch.tensor(float(residual_scale_init)),
             )
 
-        # Cache parameter names accepted by attention.forward for cross-version compatibility
+        # Cache tên parameter mà attention.forward nhận để tương thích nhiều version.
         import inspect
         self._attn_params = set(inspect.signature(self.attention.forward).parameters.keys())
 
-        # Storage for layer-level routing metrics collected during forward pass
+        # Lưu routing metric ở cấp layer từ forward pass.
         self.last_routing_info: dict[str, Any] = {}
 
     def forward(
@@ -126,7 +127,7 @@ class TransformerMoELayer(nn.Module):
         *args: Any,
         **kwargs: Any,
     ) -> torch.Tensor:
-        # 1. Self-attention sub-layer (preserves HuggingFace RobertaAttention contract)
+        # 1. Self-attention sub-layer, giữ contract RobertaAttention của HuggingFace.
         attn_kwargs = dict(kwargs)
         if head_mask is not None:
             attn_kwargs["head_mask"] = head_mask
@@ -143,7 +144,7 @@ class TransformerMoELayer(nn.Module):
         attention_outputs = self.attention(hidden_states, attention_mask, **filtered_kwargs)
         attention_output = attention_outputs[0]
 
-        # 2. Token-level MoE Feed-Forward Network
+        # 2. Token-level MoE Feed-Forward Network.
         batch_size, seq_len, hidden_size = attention_output.shape
         flat_tokens = attention_output.reshape(-1, hidden_size)
 
@@ -184,17 +185,17 @@ class TransformerMoELayer(nn.Module):
 
         moe_output = moe_output.reshape(batch_size, seq_len, hidden_size)
 
-        # Residual connection + Dropout + LayerNorm
+        # Residual connection + Dropout + LayerNorm.
         layer_output = self.LayerNorm(
             self.moe_residual_scale * self.dropout(moe_output) + attention_output
         )
 
-        # 3. Compute load-balancing loss with padding mask awareness
+        # 3. Tính load-balancing loss và xử lý padding mask.
         valid_mask = None
         if attention_mask is not None:
             if attention_mask.dim() == 4:
-                # Shape can be (batch, 1, 1, seq_len) or (batch, 1, seq_len, seq_len)
-                # Slicing [:, 0, 0, :] extracts (batch, seq_len) keys
+                # Shape có thể là (batch, 1, 1, seq_len) hoặc (batch, 1, seq_len, seq_len).
+                # [:, 0, 0, :] lấy key có shape (batch, seq_len).
                 valid_mask = (attention_mask[:, 0, 0, :] > -1.0).reshape(-1)
             elif attention_mask.dim() == 2:
                 valid_mask = (attention_mask == 1).reshape(-1)
@@ -227,12 +228,12 @@ class TransformerMoELayer(nn.Module):
             **(dynamic_info or {}),
         }
 
-        # Recent Transformers versions pass each layer output directly to the next layer.
+        # Transformers version mới truyền trực tiếp output của layer sang layer kế tiếp.
         return layer_output
 
 
 class PhoBERTClassificationHead(nn.Module):
-    """Standard sequence classification head for RoBERTa/PhoBERT."""
+    """Sequence classification head chuẩn cho RoBERTa/PhoBERT."""
 
     def __init__(self, hidden_size: int, num_labels: int, dropout: float = 0.1) -> None:
         super().__init__()
@@ -249,7 +250,7 @@ class PhoBERTClassificationHead(nn.Module):
 
 
 class TransformerMoEClassifier(nn.Module):
-    """True MoE Transformer with selected internal FFNs replaced by Sparse MoE layers."""
+    """MoE Transformer thay FFN nội bộ được chọn bằng Sparse MoE layer."""
 
     def __init__(self, vocab_size: int, num_labels: int, config: dict) -> None:
         super().__init__()
@@ -279,7 +280,7 @@ class TransformerMoEClassifier(nn.Module):
         if self.pooling not in {"cls", "mean"}:
             raise ValueError("pooling must be either 'cls' or 'mean'")
 
-        # Parse which layers to convert to MoE
+        # Parse các layer cần chuyển sang MoE.
         moe_layers_cfg = config.get("moe_layers", [8, 9, 10, 11])
         if isinstance(moe_layers_cfg, str):
             cfg_lower = moe_layers_cfg.lower()
@@ -326,25 +327,25 @@ class TransformerMoEClassifier(nn.Module):
         hidden_size = self.roberta.config.hidden_size
         self.classifier = PhoBERTClassificationHead(hidden_size, num_labels, dropout=dropout)
 
-        # Handle freezing options (Default: Full Fine-Tuning)
+        # Xử lý tùy chọn freeze, mặc định là Full Fine-Tuning.
         self.freeze_attention = bool(config.get("freeze_attention", False))
         self.freeze_embeddings = bool(config.get("freeze_embeddings", False))
         self._apply_freezing()
 
     def _apply_freezing(self) -> None:
-        """Apply parameter freezing based on user configuration."""
+        """Áp dụng freeze parameter theo cấu hình của người dùng."""
         if self.freeze_embeddings:
             for param in self.roberta.embeddings.parameters():
                 param.requires_grad = False
 
         if self.freeze_attention:
-            # Freeze self-attention in all layers
+            # Freeze self-attention trong toàn bộ layer.
             encoder_layers = get_encoder_layers(self.roberta)
             for layer in encoder_layers:
                 for param in layer.attention.parameters():
                     param.requires_grad = False
 
-            # Freeze intermediate and output in any remaining dense (non-MoE) layers
+            # Freeze intermediate và output trong dense layer còn lại, không phải MoE.
             for idx, layer in enumerate(encoder_layers):
                 if idx not in self.moe_layer_indices:
                     for param in layer.intermediate.parameters():
@@ -352,8 +353,9 @@ class TransformerMoEClassifier(nn.Module):
                     for param in layer.output.parameters():
                         param.requires_grad = False
 
-    def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor):
-        outputs = self.roberta(input_ids=input_ids, attention_mask=attention_mask)
+    def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor, token_type_ids: torch.Tensor | None = None):
+        segment_inputs = {} if token_type_ids is None else {"token_type_ids": token_type_ids}
+        outputs = self.roberta(input_ids=input_ids, attention_mask=attention_mask, **segment_inputs)
         hidden_states = outputs.last_hidden_state
 
         if self.pooling == "cls":
@@ -364,7 +366,7 @@ class TransformerMoEClassifier(nn.Module):
 
         logits = self.classifier(pooled)
 
-        # Aggregate auxiliary balance loss across all active MoE layers
+        # Aggregate auxiliary balance loss trên toàn bộ MoE layer đang active.
         total_balance_loss = torch.tensor(0.0, device=input_ids.device)
         total_dynamic_loss = torch.tensor(0.0, device=input_ids.device)
         layer_routing = {}

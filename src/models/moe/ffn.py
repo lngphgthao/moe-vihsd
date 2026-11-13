@@ -1,11 +1,11 @@
-"""Expert feed-forward networks used by the MoE layer."""
+"""Feed-forward network của expert dùng trong MoE layer."""
 
 import torch
 import torch.nn as nn
 
 
 class Expert(nn.Module):
-    """A residual-compatible GELU or gated feed-forward expert."""
+    """Expert feed-forward GELU hoặc gated, tương thích với residual."""
 
     def __init__(
         self,
@@ -33,7 +33,7 @@ class Expert(nn.Module):
             self.output_projection = nn.Linear(hidden_dim, input_dim)
 
     def upcycle_from_ffn(self, intermediate: nn.Linear, output: nn.Linear) -> None:
-        """Copy a pretrained two-layer FFN into a compatible GELU expert."""
+        """Copy FFN pretrained hai layer vào GELU expert tương thích."""
         if self.expert_type != "gelu":
             raise ValueError("Pretrained FFN upcycling is only supported for GELU experts")
         with torch.no_grad():

@@ -1,1 +1,1 @@
-"""Core package for ViHSD PhoBERT-MoE experiment utilities."""
+"""Package lõi chứa các tiện ích experiment PhoBERT-MoE cho ViHSD."""

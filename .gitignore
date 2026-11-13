@@ -26,6 +26,9 @@ Thumbs.db
 # Downloaded datasets and local data artifacts
 data/raw/
 data/processed/
+data/cache/
+data/vianli_segmented/
+data/vihsd_segmented/
 *.csv
 experiments/**
 !experiments/experiment_tracker.csv
@@ -33,10 +36,8 @@ experiments/**
 *.arrow
 *.parquet
 *.zip
-!data/vihsd_segmented/
-!data/vihsd_segmented/**
-!data/vianli_segmented/
-!data/vianli_segmented/**
+!data/manifests/
+!data/manifests/**
 
 # Training outputs and local experiment artifacts
 results/
@@ -59,7 +60,14 @@ logs/
 *.temp
 *.bak
 
-# Local agent planning and session documentation
-/AGENTS.md
-/docs/
+# Versioned governance and research records
+# Keep the repository rules, architecture decisions, plans, notes, and results
+# reviewable in a fresh clone. Runtime outputs remain ignored above.
+!/AGENTS.md
+!/docs/
+!/docs/**
+!/experiments/
+!/experiments/**
+!/tasks/
+!/tasks/**
 .agent/

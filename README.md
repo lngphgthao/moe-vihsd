@@ -1,8 +1,12 @@
-# ViHSD Mixture of Experts Experiment
+# Experiment Mixture of Experts trên ViHSD
 
 This project trains and evaluates PhoBERT and Mixture of Experts (MoE) architectures for ViHSD. All experiments use the same configuration-driven workflow, run IDs, checkpoints, and saved metrics so model variants can be compared consistently.
 
-## Choose a workflow
+## Specification của luận văn
+
+For the thesis aim, scope, research questions, dataset/method details, experiment policy, current evidence gaps, timeline, and contributor workflow, start with [the thesis project specification](docs/THESIS_SPECIFICATION.md). It is the handoff document for understanding and continuing the research. Read [AGENTS.md](AGENTS.md), the tracked run ledger (`experiments/experiment_tracker.csv`), and the [experiment plan](experiments/EXPERIMENT_PLAN.md) before proposing or interpreting runs.
+
+## Chọn workflow
 
 | Workflow       | Start here                                                                                  |
 | -------------- | ------------------------------------------------------------------------------------------- |
@@ -10,16 +14,24 @@ This project trains and evaluates PhoBERT and Mixture of Experts (MoE) architect
 | Google Colab   | Open [main_colab.ipynb](notebooks/main_colab.ipynb) in Colab and follow the setup cells.    |
 | Local terminal | Install dependencies, authenticate Hugging Face, then run the commands below.               |
 
-### Local setup
+### Thiết lập local
+
+Use Python 3.10 or newer. Install Java 8 or newer and ensure `java` is on `PATH`
+before running either word-segmentation script. `requirements.txt` includes the
+VnCoreNLP Python wrapper and pins Transformers to 5.5.0 for the encoder-layer
+contract used by Transformer-MoE. PyTorch 2.6 or newer also supports the pretrained
+weight-loading safety checks used by this Transformers version.
 
 ```bash
 pip install -r requirements.txt
 hf auth login
 python train.py --config configs/vihsd.yaml --smoke-test --run-id smoke-check
-python evaluate.py --config configs/vihsd.yaml --run-id smoke-check
 ```
 
-Use the smoke test to verify the environment and dataset access. For a full experiment, replace `--smoke-test` with `--no-smoke-test`.
+Run the offline regression tests from this directory with
+`python -m unittest discover -s tests -v`.
+
+Use the smoke test to verify the environment and dataset access. Training evaluates validation only; reserve `evaluate.py` for a finalist after its configuration and selection criteria are locked. For a full experiment, replace `--smoke-test` with `--no-smoke-test`.
 
 ### Kaggle setup
 
@@ -58,7 +70,7 @@ The architectures are selected through the shared model factory in [src/models/f
 
 Available architecture names:
 
-- `nlimoe`: shared PhoBERT encoder with mean pooling and per-example dynamic-threshold routing (NLIMoE-style).
+- `nlimoe`: shared pretrained encoder with mean pooling and sequence-level dynamic or top-k routing.
 - `transformer_moe` with `model.routing_method=dynamic_threshold`: token-level dynamic-threshold routing inside the selected transformer FFNs. `top_k` remains the default.
 
 - `transformer_moe` — true token-level MoE Transformer: loads a compatible BERT/RoBERTa-family encoder and replaces selected internal FFNs with Sparse MoE layers in [src/models/moe/layer.py](src/models/moe/layer.py)
@@ -69,6 +81,29 @@ Available architecture names:
 - `hybrid_moe` — Transformer-MoE encoder followed by a Classifier-MoE head
 
 Select an architecture in the YAML file or override it for one run. No code changes are required.
+
+### Tái triển khai NLIMoE trên ViANLI
+
+Dùng `configs/architectures/vianli_nlimoe_dynamic.yaml` cho 7 expert Dynamic
+hoặc `configs/architectures/vianli_nlimoe_topk.yaml` cho 5 expert Top-4.
+Cả hai dùng XLM-R-base theo ngân sách GPU, expert dropout 0.4, classifier
+dropout 0.0, batch 16 và 7 epoch. Revision dữ liệu/model/tokenizer được cố định.
+
+`training.eval_frequency=400` được hiểu là 400 optimizer step, đếm liên tục
+qua các epoch. Mỗi mốc đánh giá toàn bộ validation, cùng một lần ở bước cuối
+nếu cần. Cấu hình `null` dùng lịch mỗi epoch. Trong bài, đơn vị 400 chưa được
+xác nhận. Các giả định về lịch đánh giá, straight-through estimator và fallback
+được ghi tại [D005](docs/DECISIONS.md#d005--chuẩn-bị-tái-triển-khai-nlimoe-trên-xlm-r-base).
+
+Chạy từ thư mục `code/`, dùng run ID mới đã ghi nhận cho lần thực thi.
+
+```bash
+python train.py --config configs/architectures/vianli_nlimoe_dynamic.yaml --no-smoke-test --run-id run-003
+```
+
+Theo dõi `global_step` trong W&B và `training_history.json`. Chọn checkpoint
+bằng validation macro F1. Test được đánh giá sau khi khóa finalist bằng
+`evaluate.py --final-evaluation` với cấu hình và run ID tương ứng.
 
 Example dynamic-routing run (uses validation for checkpoint selection like the other architectures):
 
@@ -140,6 +175,7 @@ provide `last_hidden_state` and a `hidden_size` configuration value.
 | `evaluate.py` | `--config PATH`                    | `configs/vihsd.yaml`   | Supplies the configuration used to rebuild the model and data pipeline. |
 | `evaluate.py` | `--run-id ID`                      | latest run             | Evaluates a saved run and loads its resolved configuration.             |
 | `evaluate.py` | `--checkpoint PATH`                | none                   | Evaluates one explicit `.safetensors` checkpoint.                       |
+| `evaluate.py` | `--final-evaluation`               | required               | Confirms the finalist config and seed set are locked before test access. |
 
 ### Configuration arguments
 
@@ -189,7 +225,7 @@ python train.py --config configs/vihsd.yaml --no-smoke-test \
 
 Training and evaluation are separate commands. Always use a unique `--run-id` for a new experiment.
 
-### Dense ViANLI baselines
+### Dense baseline cho ViANLI
 
 Use the unified YAML group runner to compare dense Hugging Face encoders and seeds. Each run
 gets a unique generated ID and uses the same trainer, validation selection, checkpoint format,
@@ -247,17 +283,17 @@ still usable. To debug a run, inspect these files in order:
 2. `checkpoints/<run-id>/*_metadata.json` for the architecture and checkpoint.
 3. `results/<run-id>/hyperparameters.json` and `run_metrics.json` for settings and metrics.
 
-Evaluate either architecture with the same command:
+After locking the finalist configuration and seed set from validation results, evaluate the finalist with the same command:
 
 ```bash
-python evaluate.py --config configs/vihsd.yaml --run-id dense-phobert-integrated
-python evaluate.py --config configs/vihsd.yaml --run-id phobert-moe-integrated
+python evaluate.py --final-evaluation --config configs/vihsd.yaml --run-id <locked-finalist-run-id>
 ```
 
 ### Evaluate
 
 ```bash
 python evaluate.py \
+  --final-evaluation \
   --config configs/vihsd.yaml \
   --run-id phobert-moe-integrated
 ```
@@ -266,11 +302,12 @@ Evaluation reloads the best checkpoint for that run. To evaluate a checkpoint di
 
 ```bash
 python evaluate.py \
+  --final-evaluation \
   --config configs/vihsd.yaml \
   --checkpoint checkpoints/<run-id>/<architecture>_best.safetensors
 ```
 
-### Override settings for one run
+### Override thiết lập cho một run
 
 Use repeated `--set section.key=value` options. The YAML file is not modified, and only existing keys can be overridden.
 
@@ -309,7 +346,7 @@ python train.py \
 
 Values are parsed as YAML. Use `true`, `false`, `null`, numbers, quoted strings, or YAML lists as needed.
 
-### What to tune first
+### Thứ tự tuning
 
 | Priority | Settings                                                           | Compact guidance                                                                                                |
 | -------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
@@ -319,7 +356,7 @@ Values are parsed as YAML. Use `true`, `false`, `null`, numbers, quoted strings,
 | 4        | `training.weight_decay`, `model.dropout`                           | Regularization tuning is helpful when validation performance starts to diverge from training performance.       |
 | 5        | `model.expert_hidden_dim`, `training.batch_size`                   | Secondary capacity and optimization controls.                                                                   |
 
-## Outputs and run IDs
+## Output và run ID
 
 Each training run receives a unique Hanoi-time (`UTC+07:00`) timestamp and profile identifier, for example:
 
@@ -334,22 +371,22 @@ Important files in `results/<run-id>/`:
 
 | File                     | Contents                                 |
 | ------------------------ | ---------------------------------------- |
-| `run_metrics.json`       | Best-validation and final test metrics   |
+| `run_metrics.json`       | Best train and validation metrics        |
 | `training_history.json`  | Metrics for every training epoch         |
 | `hyperparameters.json`   | Resolved settings, including dotted keys |
 | `vihsd_predictions.json` | Saved test predictions, when generated   |
 
-`run_metrics.json` includes loss, accuracy, Macro F1, Weighted F1, and per-class F1. The best checkpoint is selected by validation Macro F1. Use test metrics only for reporting the final model, not for choosing hyperparameters.
+`run_metrics.json` records train and validation metrics only. The best checkpoint is selected by validation Macro F1. Run `evaluate.py` only after locking the finalist configuration and seed set to produce test metrics and prediction diagnostics; never use those test results to choose configurations or checkpoints. Smoke checks and screening runs should not be evaluated on test.
 
 To evaluate an older run, pass its identifier:
 
 ```bash
-python evaluate.py --config configs/vihsd.yaml --run-id 20260822T143015Z-full
+python evaluate.py --final-evaluation --config configs/vihsd.yaml --run-id 20260822T143015Z-full
 ```
 
 The YAML defaults to full training. Use `--smoke-test` for the short profile and `--no-smoke-test` to explicitly force the full profile. The smoke profile uses `training.smoke.epochs` and `training.smoke.max_train_samples`; the full profile uses the top-level `training.epochs` and `training.max_train_samples` values.
 
-## Storage and authentication
+## Lưu trữ và authentication
 
 The default checkpoint path is the local `checkpoints` folder.
 
@@ -363,7 +400,7 @@ The default checkpoint path is the local `checkpoints` folder.
 
 Credentials are read at runtime and are not stored in the notebook, YAML files, or repository. No `.env` file is used.
 
-## Runtime notes
+## Ghi chú runtime
 
 - Set `logging.use_wandb: true` in the YAML to enable W&B logging.
 - Tokenization uses `dataset.tokenization_num_proc` workers and the Hugging Face cache. Set it to `1` if multiprocessing is unavailable.

@@ -1,20 +1,18 @@
-# Configuration Guide
+# Hướng dẫn config
 
-This directory contains all experiment definitions for the repository. YAML is the source of
-truth for dataset selection, model construction, training settings, routing, diagnostics,
-output paths, and W&B logging.
+Thư mục này chứa các định nghĩa experiment của repository. YAML là nguồn sự thật cho việc
+chọn dataset, dựng model, thiết lập training, routing, diagnostics, output path và W&B logging.
 
-The Python entry points do not silently invent experiment settings. A run is defined by:
+Các Python entry point không tự tạo thiết lập experiment. Một run được định nghĩa bởi:
 
 1. a base YAML file;
 2. optional `base_config` inheritance;
 3. explicit YAML values in the selected file;
 4. optional command-line `--set section.key=value` overrides.
 
-The resolved configuration is saved with every run and is the authoritative record of what was
-executed.
+Config đã resolve được lưu cùng mỗi run và là record có thẩm quyền về nội dung đã thực thi.
 
-## Directory Structure
+## Cấu trúc thư mục
 
 ```text
 configs/
@@ -40,7 +38,7 @@ configs/
 There is no active `configs/experiments/` or `configs/vihsd_experiments/` directory. ViHSD
 overlays are under `configs/stages/vihsd/`.
 
-## Which Config To Use
+## Chọn config để sử dụng
 
 | Purpose                     | Use                                                 | When                                                                |
 | --------------------------- | --------------------------------------------------- | ------------------------------------------------------------------- |
@@ -55,7 +53,7 @@ overlays are under `configs/stages/vihsd/`.
 | Tiny overfit/debugging      | `configs/diagnostics/`                              | Investigate label, loss, routing, or collapse behavior              |
 | Research stage definition   | `configs/workflows/vianli_stages.yaml`              | Record candidate values and stage gates; it is not a trainer config |
 
-## Architecture Names
+## Tên architecture
 
 Use these canonical names in new files:
 
@@ -75,7 +73,7 @@ Compatibility aliases retained for older runs:
 
 Use the canonical names for new experiments even when the selected backbone is PhoBERT.
 
-## Inheritance Rules
+## Quy tắc kế thừa
 
 `base_config` is resolved by `src/utils/config.py`. The loader first resolves a path relative to
 the child config and then falls back to the current working directory.
@@ -106,9 +104,9 @@ routing:
   load_balance_loss_factor: 0.01
 ```
 
-## Configuration Rules
+## Quy tắc config
 
-### Dataset and labels
+### Dataset và label
 
 - Keep dataset columns and split names explicit.
 - For NLI, set `input_mode: nli`, `premise_column`, `hypothesis_column`, and an explicit
@@ -118,7 +116,7 @@ routing:
   segmentation.
 - Never change label ordering between comparable runs.
 
-### Model comparisons
+### So sánh model
 
 - Set `model.architecture` and `model.pretrained_model_name` explicitly in comparison configs.
 - Change one experimental factor at a time.
@@ -132,7 +130,7 @@ routing:
   encoder and head routing settings cannot be confused. Set `model.hybrid_head_type` to
   `nlimoe` and use `model.nlimoe` to compare the reusable dynamic/top-k head.
 
-### Training and evaluation
+### Training và evaluation
 
 - Use validation macro F1 for checkpoint and hyperparameter selection.
 - Do not use test metrics to choose configurations.
@@ -148,7 +146,7 @@ checks, per-class logits/probabilities, routing-by-class analysis, and separate 
 loss logging. Diagnostic configs must state clearly which training settings they intentionally
 change.
 
-## Naming Rules
+## Quy tắc đặt tên
 
 Use lowercase kebab-case for run IDs and include the important experimental factors:
 
@@ -167,7 +165,7 @@ vianli-classifier-moe-overfit-s42
 
 The run ID identifies an execution. It does not replace the resolved configuration.
 
-## Group Configurations
+## Group config
 
 Group files are for repeated execution, not for defining model internals. They contain:
 
@@ -200,7 +198,7 @@ python scripts/run_group.py \
 The runner creates one training run per group entry and seed. It does not select a winner or
 modify YAML files.
 
-## Common Commands
+## Lệnh thường dùng
 
 Train one run:
 
@@ -249,7 +247,7 @@ Aggregate completed runs:
 python scripts/aggregate_results.py --results-dir results
 ```
 
-## Review Checklist Before Running
+## Checklist trước khi chạy
 
 - Is the selected base config correct for the dataset?
 - Is the architecture name canonical?

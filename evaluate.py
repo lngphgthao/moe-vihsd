@@ -1,4 +1,4 @@
-"""Evaluate a saved ViHSD checkpoint and write JSON predictions."""
+"""Đánh giá checkpoint ViHSD đã lưu và ghi prediction dạng JSON."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import os
 import sys
 from pathlib import Path
 
-# Ensure repository root is on sys.path for Colab execution
+# Bảo đảm Git root có trong sys.path khi chạy từ Colab.
 REPO_ROOT = str(Path(__file__).resolve().parent)
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
@@ -20,7 +20,7 @@ import yaml
 from safetensors.torch import load_file
 from tqdm.auto import tqdm
 
-from src.models.factory import build_model, standardize_model_output
+from src.models.factory import build_model, model_inputs_from_batch, standardize_model_output
 from src.data.loader import prepare_data
 from src.evaluation.metrics import (
     compute_classification_metrics,
@@ -35,7 +35,17 @@ def main() -> None:
     parser.add_argument("--config", default="configs/vihsd.yaml")
     parser.add_argument("--checkpoint", default=None)
     parser.add_argument("--run-id", default=None, help="Evaluate a specific run directory.")
+    parser.add_argument(
+        "--final-evaluation",
+        action="store_true",
+        help="Confirm the finalist configuration and seed set are locked before test evaluation.",
+    )
     args = parser.parse_args()
+    if not args.final_evaluation:
+        parser.error(
+            "test evaluation is reserved for locked finalists; pass --final-evaluation "
+            "only after configuration and seed selection are complete"
+        )
     config = load_config(args.config)
     checkpoint_root = resolve_output_path(config["paths"]["checkpoint_dir"], "CHECKPOINT_DIR")
     if args.checkpoint:
@@ -57,6 +67,8 @@ def main() -> None:
     data_config["tokenizer"] = config["model"].get(
         "pretrained_model_name", data_config.get("tokenizer")
     )
+    if config["model"].get("pretrained_model_revision") is not None:
+        data_config["tokenizer_revision"] = config["model"]["pretrained_model_revision"]
     bundle = prepare_data(data_config)
     model_config = {**config["model"], "pad_token_id": bundle.tokenizer.pad_token_id or 0}
     model_config.setdefault("architecture", "transformer_moe")
@@ -71,10 +83,8 @@ def main() -> None:
     routing_counts = torch.zeros(getattr(model, "num_experts", 0), dtype=torch.long)
     with torch.no_grad():
         for batch in tqdm(bundle.loaders["test"], desc="Evaluating"):
-            input_ids = batch["input_ids"].to(device)
-            attention_mask = batch["attention_mask"].to(device)
             labels = batch["labels"].to(device)
-            logits, aux = standardize_model_output(model(input_ids, attention_mask))
+            logits, aux = standardize_model_output(model(**model_inputs_from_batch(batch, device)))
             predicted = logits.argmax(dim=-1)
             total_loss += F.cross_entropy(logits, labels, reduction="sum").item()
             total_examples += labels.numel()

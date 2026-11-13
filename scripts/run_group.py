@@ -1,4 +1,4 @@
-"""Run a YAML-defined group of reproducible training experiments."""
+"""Chạy group experiment reproducible được định nghĩa bằng YAML."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from typing import Any
 
 import yaml
 
-# Allow direct execution with `python scripts/run_group.py` from the repository root.
+# Cho phép chạy trực tiếp từ Git root bằng `python scripts/run_group.py`.
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
@@ -48,7 +48,13 @@ def main() -> None:
 
     group_path = Path(args.group_config)
     group = load_config(group_path)
-    default_config = str(group.get("base_config", "configs/vianli.yaml"))
+    group_definition = yaml.safe_load(group_path.read_text(encoding="utf-8")) or {}
+    base_ref = group_definition.get("base_config")
+    default_config = Path("configs/vianli.yaml")
+    if base_ref:
+        default_config = (group_path.parent / base_ref).resolve()
+        if not default_config.exists():
+            default_config = Path(base_ref).resolve()
     default_seeds = [int(seed) for seed in group.get("seeds", [42])]
     runs = group.get("runs", [])
     if not runs:

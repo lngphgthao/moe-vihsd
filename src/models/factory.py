@@ -1,4 +1,4 @@
-"""Model factory for switching architecture variants while keeping one training workflow."""
+"""Model factory để đổi architecture variant trong một training workflow."""
 
 from __future__ import annotations
 
@@ -12,11 +12,11 @@ from src.models.hybrid_moe import HybridMoEClassifier
 
 MODEL_REGISTRY: dict[str, Any] = {
     "transformer_moe": TransformerMoEClassifier,
-    # Compatibility alias for historical configurations and saved runs.
+    # Compatibility alias cho config lịch sử và run đã lưu.
     "phobert_moe": TransformerMoEClassifier,
     "nlimoe": NLIMoEClassifier,
     "dense_transformer": DenseTransformerClassifier,
-    # Compatibility alias for historical configs and saved experiment metadata.
+    # Compatibility alias cho config lịch sử và metadata experiment đã lưu.
     "dense_phobert": DenseTransformerClassifier,
     "classifier_moe": ClassifierMoEClassifier,
     "classifier_moe_phobert": ClassifierMoEClassifier,
@@ -24,8 +24,17 @@ MODEL_REGISTRY: dict[str, Any] = {
 }
 
 
+def model_inputs_from_batch(batch, device) -> dict:
+    """Chuyển các encoder input được hỗ trợ sang device của model."""
+    return {
+        key: batch[key].to(device)
+        for key in ("input_ids", "attention_mask", "token_type_ids")
+        if key in batch
+    }
+
+
 def validate_model_config(config: dict) -> str:
-    """Validate architecture-specific settings before loading model weights."""
+    """Kiểm tra thiết lập architecture trước khi load model weights."""
     architecture = str(config.get("architecture", "transformer_moe"))
     if architecture not in MODEL_REGISTRY:
         supported = ", ".join(sorted(MODEL_REGISTRY))
@@ -36,9 +45,9 @@ def validate_model_config(config: dict) -> str:
 
 
 def standardize_model_output(model_output):
-    """Normalize model output to the shared contract: (logits, aux_dict).
+    """Chuẩn hóa model output về contract chung: (logits, aux_dict).
 
-    This helper keeps the shared tuple/dictionary contract across all architectures.
+    Helper này giữ contract tuple/dictionary chung giữa các architecture.
     """
     if not isinstance(model_output, tuple):
         return model_output, {}
@@ -56,9 +65,9 @@ def standardize_model_output(model_output):
 
 
 def build_model(config: dict, vocab_size: int, num_labels: int):
-    """Instantiate a model from a config-driven architecture name.
+    """Khởi tạo model từ tên architecture trong config.
 
-    The registry includes the supported PhoBERT and dense architectures.
+    Registry bao gồm các PhoBERT và dense architecture được hỗ trợ.
     """
     architecture = validate_model_config(config)
     try:
