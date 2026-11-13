@@ -29,6 +29,24 @@ def make_original_layer(hidden_size: int = 2) -> nn.Module:
 
 
 class TestTransformerMoELayer(unittest.TestCase):
+    def test_upcycle_noise_controls_expert_symmetry(self):
+        with torch.random.fork_rng():
+            torch.manual_seed(42)
+            original = make_original_layer()
+            for noise in [0.0, 0.001, 0.01]:
+                with self.subTest(noise=noise):
+                    layer = TransformerMoELayer(original, num_experts=2, upcycle=True, expert_init_noise=noise)
+                    first, second = layer.experts
+                    for left, right in zip(first.parameters(), second.parameters()):
+                        if left.dim() > 1:
+                            self.assertEqual(torch.equal(left, right), noise == 0.0)
+                        else:
+                            torch.testing.assert_close(left, right, rtol=0, atol=0)
+                    if noise == 0.0:
+                        for expert in layer.experts:
+                            torch.testing.assert_close(expert.network[0].weight, original.intermediate.dense.weight, rtol=0, atol=0)
+                            torch.testing.assert_close(expert.network[3].weight, original.output.dense.weight, rtol=0, atol=0)
+
     def test_inner_dropout_keeps_legacy_default_and_eval_output(self):
         original = make_original_layer()
         legacy = TransformerMoELayer(original, num_experts=2, dropout=0.2, use_shared_expert=True)

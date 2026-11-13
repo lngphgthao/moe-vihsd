@@ -1,0 +1,7 @@
+# Kiểm tra phá đối xứng expert upcycle bằng noise 1e-3.
+# Chỉ đổi expert_init_noise so với finalist hiện tại (E6, unverified).
+# Giữ dropout nội bộ như finalist để cô lập ảnh hưởng của noise.
+base_config: ../finalists/vianli_best.yaml
+
+model:
+  expert_init_noise: 0.001
