@@ -1,5 +1,9 @@
-# Best confirmed ViANLI configuration
-# Architecture: XLM-RoBERTa MoE, Layers [6-11] (Last 6 Layers), 4 Experts, Dynamic Threshold Routing
+# Cấu hình ViANLI hiện tại, unverified.
+# XLM-RoBERTa MoE, các lớp [6-11], 6 expert, Dynamic Threshold Routing.
+# TODO: Xác minh finalist lịch sử là E4 hay E6 bằng resolved config/checkpoint.
+# Tracker và docs/RESULTS.md có cả VIANLI-ROUTE-E4-DYNAMIC-S42 và
+# VIANLI-ROUTE-E6-DYNAMIC-S42, đều unverified, thiếu liên kết config/artifact.
+# Giữ num_experts hiện tại; comment và run_name mô tả YAML này.
 base_config: ../vianli.yaml
 
 seed: 42
@@ -19,4 +23,4 @@ model:
 logging:
   use_wandb: true
   project: moe-vianli
-  run_name: vianli-xlmr-moe-last6-e4-dynamic
+  run_name: vianli-xlmr-moe-last6-e6-dynamic
