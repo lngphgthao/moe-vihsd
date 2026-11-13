@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import random
 import sys
@@ -175,7 +176,34 @@ def apply_training_profile(config, smoke_test_override):
     return smoke_test
 
 
-def create_hyperparameters_log(config, run_id, smoke_test):
+def create_optimizer_param_groups(model, training):
+    """Chia tham số trainable theo tên, ưu tiên router trước head chứa nó."""
+    learning_rate = float(training["learning_rate"])
+    groups = {}
+    for name in ("backbone", "head", "router"):
+        configured_lr = None if name == "backbone" else training.get(f"{name}_learning_rate")
+        group_lr = learning_rate if configured_lr is None else float(configured_lr)
+        if not math.isfinite(group_lr) or group_lr < 0:
+            raise ValueError(f"Invalid learning rate for {name}: {group_lr}")
+        groups[name] = {
+            "name": name,
+            "params": [],
+            "lr": group_lr,
+        }
+    for name, parameter in model.named_parameters():
+        if not parameter.requires_grad:
+            continue
+        if "router" in name.split(".")[:-1]:
+            group = "router"
+        elif name.startswith(("classifier_moe.", "nlimoe.", "classifier.")):
+            group = "head"
+        else:
+            group = "backbone"
+        groups[group]["params"].append(parameter)
+    return [group for group in groups.values() if group["params"]]
+
+
+def create_hyperparameters_log(config, run_id, smoke_test, optimizer_groups=None):
     """Giữ các thiết lập định nghĩa experiment, loại trừ path và credentials."""
     hyperparameters = {
         "seed": config["seed"],
@@ -192,6 +220,7 @@ def create_hyperparameters_log(config, run_id, smoke_test):
         "architecture": architecture,
         "hyperparameters": hyperparameters,
         "flat_hyperparameters": flatten_hyperparameters(hyperparameters),
+        "optimizer_groups": optimizer_groups,
     }
 
 
@@ -367,8 +396,14 @@ def main() -> None:
         print(f"  expert_hidden_dim: {model_config.get('expert_hidden_dim', 512)}")
         print(f"  shared_expert: {model_config.get('shared_expert', False)}")
         print(f"  use_residual: {model_config.get('use_residual', False)}")
-    trainable_params = [p for p in model.parameters() if p.requires_grad]
-    optimizer = torch.optim.AdamW(trainable_params, lr=float(config["training"]["learning_rate"]), weight_decay=float(config["training"]["weight_decay"]))
+    parameter_groups = create_optimizer_param_groups(model, config["training"])
+    optimizer = torch.optim.AdamW(parameter_groups, lr=float(config["training"]["learning_rate"]), weight_decay=float(config["training"]["weight_decay"]))
+    optimizer_groups = [
+        {"name": group["name"], "num_parameters": sum(p.numel() for p in group["params"]), "lr": group["lr"]}
+        for group in parameter_groups
+    ]
+    print("Optimizer parameter groups:")
+    print(json.dumps(optimizer_groups, indent=2))
     routing_cfg = config.get("routing", {})
     balance_factor = float(
         routing_cfg.get("load_balance_loss_coef")
@@ -403,7 +438,7 @@ def main() -> None:
     )
     hyperparameters_path = results_dir / "hyperparameters.json"
     hyperparameters_path.write_text(
-        json.dumps(create_hyperparameters_log(config, run_id, smoke_test), indent=2, sort_keys=True),
+        json.dumps(create_hyperparameters_log(config, run_id, smoke_test, optimizer_groups), indent=2, sort_keys=True),
         encoding="utf-8",
     )
     wandb_run = maybe_start_wandb(config, run_id)

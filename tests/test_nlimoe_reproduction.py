@@ -103,6 +103,10 @@ class TestNLIMoEReproduction(unittest.TestCase):
                         train.main()
                     self.assertEqual(prepare.call_args.args[0]["tokenizer_revision"], config["model"]["pretrained_model_revision"])
                     results = Path(directory) / "results/offline"
+                    hyperparameters = json.loads((results / "hyperparameters.json").read_text())
+                    groups = hyperparameters["optimizer_groups"]
+                    self.assertEqual(sum(group["num_parameters"] for group in groups), sum(p.numel() for p in model.parameters() if p.requires_grad))
+                    self.assertEqual({group["lr"] for group in groups}, {config["training"]["learning_rate"]})
                     history = json.loads((results / "training_history.json").read_text())
                     self.assertEqual([record["global_step"] for record in history], expected_steps)
                     summary = json.loads((results / "run_metrics.json").read_text())

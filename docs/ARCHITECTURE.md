@@ -203,6 +203,12 @@ outside Git.
 overrides, sets random seeds, prepares data, builds the selected model, and creates an AdamW
 optimizer over trainable parameters.
 
+`training.head_learning_rate` và `training.router_learning_rate` mặc định `null`, dùng
+`training.learning_rate`. Nhóm router gồm thành phần tên `router` và được ưu tiên
+trước head. Head gồm các tiền tố `classifier_moe.`, `nlimoe.`, `classifier.`.
+Tham số trainable còn lại dùng nhóm backbone. Mỗi tham số dùng chung chỉ xuất hiện
+một lần. Console và `hyperparameters.json` ghi tên nhóm, số phần tử tham số và lr.
+
 For each epoch it records task classification loss, balance loss, dynamic loss, their combined
 auxiliary value, accuracy, macro F1, weighted F1, and validation metrics. The best checkpoint
 is selected using validation macro F1. W&B logging is optional and is controlled by the

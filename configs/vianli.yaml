@@ -66,6 +66,8 @@ training:
   epochs: 7 # paper's setting (NLIMoEDynamic used 7 epochs)
   batch_size: 16
   learning_rate: 0.00001 # paper's setting (1e-5; their model used this for XLM-R)
+  head_learning_rate: null # null giữ learning_rate chung cho head.
+  router_learning_rate: null # null giữ learning_rate chung cho router.
   weight_decay: 0.0 # paper's setting (0.0; no L2 regularization)
   loss_type: cross_entropy # ViANLI labels are roughly balanced (no reweighting needed)
   focal_gamma: 2.0
