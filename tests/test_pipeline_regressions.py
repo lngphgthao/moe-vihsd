@@ -42,18 +42,24 @@ class TestPipelineRegressions(unittest.TestCase):
                         self.assertEqual(batch["token_type_ids"].tolist(), [[0, 0, 1, 0]] * 2)
 
     def test_group_runs_use_the_declared_dense_baseline(self):
-        group_path = REPO_ROOT / "configs/groups/vianli_dense_backbones.yaml"
-        with patch("sys.argv", ["run_group.py", "--group-config", str(group_path)]):
-            with patch.object(run_group, "_run_entry") as run:
-                run_group.main()
-        self.assertEqual(run.call_count, 6)
-        for call in run.call_args_list:
-            config_path, run_id, overrides, _ = call.args
-            self.assertEqual(Path(config_path), REPO_ROOT / "configs/baselines/vianli_dense.yaml")
-            resolved = apply_overrides(load_config(config_path), run_group._override_args(overrides)[1::2])
-            self.assertEqual(resolved["logging"]["project"], "dense-vianli")
-            self.assertEqual(resolved["model"]["architecture"], "dense_transformer")
-            self.assertIn(resolved["seed"], [43, 44])
+        for filename in ["vianli_dense_backbones.yaml", "vianli_stage1_dense_backbones.yaml"]:
+            with self.subTest(group=filename):
+                group_path = REPO_ROOT / "configs/groups" / filename
+                with patch("sys.argv", ["run_group.py", "--group-config", str(group_path)]):
+                    with patch.object(run_group, "_run_entry") as run:
+                        run_group.main()
+                self.assertEqual(run.call_count, 9)
+                seeds_by_backbone = {}
+                for call in run.call_args_list:
+                    config_path, run_id, overrides, _ = call.args
+                    self.assertEqual(Path(config_path), REPO_ROOT / "configs/baselines/vianli_dense.yaml")
+                    resolved = apply_overrides(load_config(config_path), run_group._override_args(overrides)[1::2])
+                    self.assertEqual(resolved["logging"]["project"], "dense-vianli")
+                    self.assertEqual(resolved["model"]["architecture"], "dense_transformer")
+                    seeds_by_backbone.setdefault(resolved["model"]["pretrained_model_name"], []).append(resolved["seed"])
+                self.assertEqual(len(seeds_by_backbone), 3)
+                for seeds in seeds_by_backbone.values():
+                    self.assertEqual(seeds, [42, 43, 44])
 
     def test_macro_f1_includes_all_configured_classes(self):
         metrics = compute_classification_metrics([0, 0], [0, 0], ["a", "b", "c"])
