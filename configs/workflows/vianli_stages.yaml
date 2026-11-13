@@ -20,6 +20,7 @@ stages:
     candidates: [1, 2]
     optional: [4]
   stage_5_capacity_factor:
+    # NOT IMPLEMENTED: Router hiện chưa hỗ trợ capacity_factor hoặc giới hạn token/expert.
     candidates: [0.5, 1.0, 2.0]
   stage_6_load_balance:
     candidates: [0.0, 0.001, 0.01]
