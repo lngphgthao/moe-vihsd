@@ -136,6 +136,12 @@ The layer supports:
 - fixed or learnable MoE residual scaling;
 - auxiliary load-balancing loss.
 
+`model.expert_inner_dropout` mặc định `null`, dùng dropout của Transformer-MoE
+như trước. Giá trị `0.0` tắt dropout bên trong expert routed và shared, giữ chỉ số
+Linear trong state dict để nạp checkpoint cũ. Tùy chọn cũng đi qua encoder Hybrid.
+`configs/ablations/vianli_moe_no_inner_dropout.yaml` đối chứng với YAML finalist
+hiện tại bằng cách chỉ thay biến này. Expert và output residual có dropout riêng.
+
 Backbone hidden size, layer count, and original FFN dimensions are read from the loaded model
 modules rather than hardcoded for a specific backbone.
 

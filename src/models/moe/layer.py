@@ -33,6 +33,7 @@ class TransformerMoELayer(nn.Module):
         dynamic_static_threshold: float = 0.1,
         dynamic_threshold_scale: float = 0.1,
         dynamic_threshold_temperature: float = 0.02,
+        expert_inner_dropout: float | None = None,
     ) -> None:
         super().__init__()
         # Giữ nguyên self-attention module ban đầu.
@@ -41,6 +42,9 @@ class TransformerMoELayer(nn.Module):
         hidden_size = original_layer.intermediate.dense.in_features
         intermediate_size = original_layer.intermediate.dense.out_features
         expert_hidden_size = expert_hidden_size or intermediate_size
+        inner_dropout = dropout if expert_inner_dropout is None else float(expert_inner_dropout)
+        if not 0.0 <= inner_dropout <= 1.0:
+            raise ValueError("expert_inner_dropout must be within [0, 1] or null")
         if upcycle and expert_type != "gelu":
             raise ValueError("upcycle=true is only supported with expert_type='gelu'")
         if expert_init_noise < 0:
@@ -68,7 +72,7 @@ class TransformerMoELayer(nn.Module):
             else:
                 self.router = TopKRouter(hidden_size, self.num_experts, top_k)
             self.experts = nn.ModuleList(
-                [Expert(hidden_size, expert_hidden_size, dropout, expert_type) for _ in range(self.num_experts)]
+                [Expert(hidden_size, expert_hidden_size, inner_dropout, expert_type) for _ in range(self.num_experts)]
             )
 
             if upcycle:
@@ -88,7 +92,7 @@ class TransformerMoELayer(nn.Module):
                                 parameter.add_(expert_init_noise * torch.randn_like(parameter))
 
         if self.use_shared_expert:
-            self.shared_expert = Expert(hidden_size, expert_hidden_size, dropout, "gelu")
+            self.shared_expert = Expert(hidden_size, expert_hidden_size, inner_dropout, "gelu")
             if upcycle:
                 self.shared_expert.upcycle_from_ffn(
                     original_layer.intermediate.dense,
@@ -309,6 +313,7 @@ class TransformerMoEClassifier(nn.Module):
                 num_experts=num_experts,
                 top_k=top_k,
                 dropout=dropout,
+                expert_inner_dropout=config.get("expert_inner_dropout"),
                 upcycle=upcycle,
                 expert_type=expert_type,
                 expert_hidden_size=expert_hidden_size,

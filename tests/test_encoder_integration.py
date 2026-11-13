@@ -27,6 +27,7 @@ class TestEncoderIntegration(unittest.TestCase):
                         "moe_layers": [1], "num_experts": 2, "top_k": 1,
                         "dynamic_num_experts": 2, "dynamic_top_k": 1, "routing_type": "top_k",
                         "expert_hidden_dim": 8, "dropout": 0.0,
+                        "expert_inner_dropout": 0.0,
                         "transformer_moe": {"num_experts": 2, "routing_method": "top_k"},
                         "classifier_moe": {"num_experts": 2, "top_k": 1, "expert_hidden_dim": 8},
                     }
@@ -35,6 +36,8 @@ class TestEncoderIntegration(unittest.TestCase):
                          patch("src.models.nlimoe.load_backbone", return_value=encoder), \
                          patch("src.models.moe.layer.load_moe_backbone", return_value=encoder):
                         model = build_model(model_config, 30, 3)
+                    for layer in getattr(model, "moe_layers", {}).values():
+                        self.assertTrue(all(expert.network[2].p == 0.0 for expert in layer.experts))
                     batch = {
                         "input_ids": torch.tensor([[1, 2, 3, 0], [1, 4, 5, 0]]),
                         "attention_mask": torch.tensor([[1, 1, 1, 0], [1, 1, 1, 0]]),

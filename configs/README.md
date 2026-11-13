@@ -33,6 +33,7 @@ configs/
   stages/
     vihsd/                          ViHSD architecture/loss overlays
   diagnostics/                      Opt-in debugging and overfit configs
+  ablations/                        Đối chứng ViANLI, mỗi overlay đổi một biến
 ```
 
 There is no active `configs/experiments/` or `configs/vihsd_experiments/` directory. ViHSD

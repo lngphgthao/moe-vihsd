@@ -29,6 +29,31 @@ def make_original_layer(hidden_size: int = 2) -> nn.Module:
 
 
 class TestTransformerMoELayer(unittest.TestCase):
+    def test_inner_dropout_keeps_legacy_default_and_eval_output(self):
+        original = make_original_layer()
+        legacy = TransformerMoELayer(original, num_experts=2, dropout=0.2, use_shared_expert=True)
+        inputs = torch.randn(2, 3, 2)
+        for option, expected in [(None, 0.2), (0.0, 0.0)]:
+            with self.subTest(expert_inner_dropout=option):
+                layer = TransformerMoELayer(
+                    original, num_experts=2, dropout=0.2, use_shared_expert=True,
+                    expert_inner_dropout=option,
+                )
+                layer.load_state_dict(legacy.state_dict(), strict=True)
+                self.assertEqual(layer.dropout.p, 0.2)
+                for expert in [*layer.experts, layer.shared_expert]:
+                    self.assertEqual(expert.network[2].p, expected)
+                legacy.eval()
+                layer.eval()
+                torch.testing.assert_close(layer(inputs), legacy(inputs), rtol=0, atol=0)
+                for expert, reference in zip(layer.experts, legacy.experts):
+                    torch.testing.assert_close(expert(inputs), reference(inputs), rtol=0, atol=0)
+
+    def test_invalid_inner_dropout_is_rejected(self):
+        for value in [-0.1, 1.1, float("nan")]:
+            with self.assertRaises(ValueError):
+                TransformerMoELayer(make_original_layer(), expert_inner_dropout=value)
+
     def test_forward_backward_and_padding_aware_balance_loss(self):
         layer = TransformerMoELayer(
             make_original_layer(),

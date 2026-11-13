@@ -58,6 +58,7 @@ model:
   dropout: 0.1
   classifier_dropout: 0.0
   transformer_moe_dropout: 0.1
+  expert_inner_dropout: null # null dùng transformer_moe_dropout như trước.
   classifier_moe_dropout: 0.1
   nlimoe_expert_dropout: 0.1
 
