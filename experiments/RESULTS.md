@@ -13,6 +13,17 @@ The tracker contains reported ViANLI dense, Transformer-MoE, Classifier-MoE, and
 migrated from the previous results ledger. Their `verification` field is `unverified` until the
 resolved configuration and saved metrics are checked.
 
+## W&B export audit
+
+The local W&B export has been inventoried in
+[`wandb_inventory.csv`](wandb_inventory.csv) and summarized in
+[`wandb_inventory.md`](wandb_inventory.md). It contains 182 JSON run records: 179 `finished`,
+2 `crashed`, and 1 `failed`. All 182 records have readable metadata, config, summary, and
+history, so the logs are recoverable locally. None is promoted to `verified`: the export does
+not by itself establish the checkpoint, source revision, dataset revision, or resolved
+environment needed for reproducibility. The report outline and evidence status are recorded in
+[`THESIS_REPORT_OUTLINE.md`](THESIS_REPORT_OUTLINE.md).
+
 ## Quan sát ban đầu
 
 - Dense ViANLI backbone runs are available for XLM-R-base, PhoBERT-base, and mBERT across

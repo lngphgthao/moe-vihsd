@@ -400,6 +400,30 @@ The default checkpoint path is the local `checkpoints` folder.
 
 Credentials are read at runtime and are not stored in the notebook, YAML files, or repository. No `.env` file is used.
 
+### Tải metrics W&B về máy
+
+Chạy từ thư mục `code/`, thay `ENTITY/PROJECT` bằng đường dẫn project trên W&B.
+
+```bash
+wandb login --verify
+python scripts/sync_wandb.py ENTITY/PROJECT
+```
+
+Chọn run cụ thể bằng `--run-id` (có thể lặp lại) và đổi thư mục lưu bằng `--output-dir`.
+
+```bash
+python scripts/sync_wandb.py ENTITY/PROJECT --run-id abc123 --run-id def456
+python scripts/sync_wandb.py ENTITY/PROJECT --output-dir D:/experiment_exports
+```
+
+- Mặc định lưu tại `code/results/wandb/<entity>/<project>/<wandb_run_id>.json`, độc lập với thư mục terminal hiện tại. Output mặc định được Git ignore và agent có thể đọc trực tiếp.
+- Mỗi snapshot chứa `metadata`, `config`, `summary`, `history` và thời điểm hoàn tất export UTC. Metadata giữ W&B ID, tên, URL, trạng thái, tags, notes và `verification: unverified` để ghi nhận nguồn chưa được đối chiếu.
+- Dùng `scan_history()` để lấy toàn bộ history còn lưu trên W&B, bao gồm các dòng có bộ metric khác nhau. History được ghi tuần tự để giới hạn bộ nhớ. Metric NaN/Infinity được xuất thành `null`; các field credential thông dụng được thay bằng `[REDACTED]`.
+- Chạy lại lệnh để tải lại và cập nhật snapshot, kể cả run đang chạy. File cũ được thay thế nguyên tử sau khi tải xong. Khi chạy đồng thời, bản hoàn tất ghi sau cùng sẽ được giữ. Run đang chạy có thể phát sinh thêm metrics trong lúc export.
+- Lỗi từng run được báo qua stderr và các run tiếp theo vẫn được xử lý. Exit code là `1` nếu có lỗi, `0` nếu thành công. Lỗi khi liệt kê project kết thúc lượt đồng bộ; chạy lại lệnh để thử lại.
+- Phạm vi tải gồm config, summary và history đã gửi lên W&B. File, media và artifacts cần được tải riêng. Các file JSON kết quả chỉ nằm trên Colab/Kaggle cần được upload trước khi có thể lấy từ W&B.
+- Snapshot giữ schema W&B để phân tích trực tiếp; công cụ `aggregate_results.py` hiện đọc schema kết quả training cục bộ.
+
 ## Ghi chú runtime
 
 - Set `logging.use_wandb: true` in the YAML to enable W&B logging.

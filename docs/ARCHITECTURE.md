@@ -26,6 +26,7 @@ configs/                         YAML configurations and experiment overlays
 scripts/
   run_group.py                   Multi-run and multi-seed execution
   aggregate_results.py           Result aggregation entry point
+  sync_wandb.py                  Offline W&B config, summary, and full-history snapshots
   segment_vianli.py              ViANLI word segmentation
   preprocess_vihsd.py            ViHSD word segmentation
 src/
