@@ -1,0 +1,63 @@
+seed: 42
+dataset:
+  id: vianli
+  name: uitnlp/ViANLI
+  revision: 0fec8d6ecb043a61c609f9b51f80401fdf1e84d3
+  config: null
+  input_mode: nli
+  label_column: label
+  label_names:
+  - entailment
+  - contradiction
+  - neutral
+  tokenizer_revision: e73636d4f797dec63c3081bb6ed5c7b0bb3f2089
+  max_length: 256
+  train_split: train
+  validation_split: validation
+  test_split: test
+  tokenization_num_proc: null
+  expected_split_sizes:
+    train: 8012
+    validation: 1000
+    test: 1000
+  premise_column: premise
+  hypothesis_column: hypothesis
+model:
+  backbone: xlm-roberta-base
+  revision: e73636d4f797dec63c3081bb6ed5c7b0bb3f2089
+  freeze_backbone: false
+  head:
+    type: original
+training:
+  smoke_test: false
+  epochs: 7
+  batch_size: 16
+  learning_rate: 1.0e-05
+  head_learning_rate: null
+  router_learning_rate: null
+  weight_decay: 0.0
+  loss_type: cross_entropy
+  focal_gamma: 2.0
+  class_weights: null
+  num_workers: 0
+  max_train_samples: null
+  max_eval_samples: null
+  eval_frequency: null
+  smoke:
+    epochs: 1
+    max_train_samples: 64
+    max_eval_samples: 32
+routing:
+  balance_loss_coef: 0.01
+logging:
+  use_wandb: true
+  project: thesis-classifier-heads
+  mode: online
+diagnostics:
+  collect_model_diagnostics: false
+  tiny_overfit:
+    enabled: false
+    samples: 150
+    epochs: 75
+paths:
+  runs_dir: runs

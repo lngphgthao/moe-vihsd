@@ -1,0 +1,62 @@
+seed: 42
+dataset:
+  id: vihsd
+  name: data/processed/vihsd_segmented
+  revision: null
+  config: null
+  input_mode: single
+  label_column: label_id
+  label_names:
+  - CLEAN
+  - OFFENSIVE
+  - HATE
+  tokenizer_revision: null
+  max_length: 128
+  train_split: train
+  validation_split: validation
+  test_split: test
+  tokenization_num_proc: null
+  expected_split_sizes:
+    train: 24048
+    validation: 2672
+    test: 6680
+  text_column: free_text
+model:
+  backbone: vinai/phobert-base
+  revision: null
+  freeze_backbone: false
+  head:
+    type: original
+training:
+  smoke_test: false
+  epochs: 7
+  batch_size: 16
+  learning_rate: 1.0e-05
+  head_learning_rate: null
+  router_learning_rate: null
+  weight_decay: 0.0
+  loss_type: cross_entropy
+  focal_gamma: 2.0
+  class_weights: null
+  num_workers: 0
+  max_train_samples: null
+  max_eval_samples: null
+  eval_frequency: null
+  smoke:
+    epochs: 1
+    max_train_samples: 64
+    max_eval_samples: 32
+routing:
+  balance_loss_coef: 0.01
+logging:
+  use_wandb: true
+  project: thesis-classifier-heads
+  mode: online
+diagnostics:
+  collect_model_diagnostics: false
+  tiny_overfit:
+    enabled: false
+    samples: 150
+    epochs: 75
+paths:
+  runs_dir: runs

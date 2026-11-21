@@ -1,0 +1,9 @@
+base_config: ../experiments/vianli/exp-004.yaml
+logging:
+  use_wandb: false
+diagnostics:
+  collect_model_diagnostics: true
+  tiny_overfit:
+    enabled: true
+    samples: 150
+    epochs: 75

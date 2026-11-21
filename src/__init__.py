@@ -1,1 +1,1 @@
-"""Package lõi chứa các tiện ích experiment PhoBERT-MoE cho ViHSD."""
+"""Pipeline nghiên cứu classification head trên dense encoder."""

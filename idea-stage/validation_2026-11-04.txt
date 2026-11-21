@@ -1,5 +1,0 @@
-2026-11-04 Asia/Saigon
-Command: .venv/Scripts/python.exe -m unittest discover -s tests -v
-Result: INCOMPLETE. No test output returned before manual interrupt; exit code 1 after Ctrl+C. No tests claimed passed.
-Environment probe: torch 2.14.0+cpu; cuda_available False; gpu_count 0.
-No training, pilot, GPU deployment, or test-set evaluation was run.

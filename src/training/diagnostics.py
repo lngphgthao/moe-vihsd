@@ -1,131 +1,57 @@
-"""Diagnostics opt-in để điều tra behavior của classifier và MoE."""
-
-from __future__ import annotations
-
+"""Chẩn đoán theo example và class, chỉ dành cho classification head."""
 from collections import defaultdict
-from typing import Any
-
 import torch
-
-from src.models.factory import model_inputs_from_batch, standardize_model_output
-
-
-def _class_names(label_names: list[str], class_id: int) -> str:
-    return label_names[class_id] if class_id < len(label_names) else str(class_id)
+from src.models.factory import model_inputs_from_batch
+from src.evaluation.metrics import compute_prediction_diagnostics
 
 
-def collect_model_diagnostics(model, loader, device, label_names: list[str]) -> dict[str, Any]:
-    """Aggregate logits, probability và routing theo true class trong loader."""
+def collect_model_diagnostics(model, loader, device, label_names):
     model.eval()
-    logits_by_class: dict[int, list[torch.Tensor]] = defaultdict(list)
-    probabilities_by_class: dict[int, list[torch.Tensor]] = defaultdict(list)
-    routing: dict[str, dict[int, dict[str, Any]]] = defaultdict(
-        lambda: defaultdict(lambda: {"probability_sum": None, "token_count": 0, "assignment_counts": None})
-    )
-
+    records = defaultdict(lambda: {"example_count": 0, "probability_sum": None, "assignment_counts": None, "entropy_sum": 0.0})
+    classification = {}
+    actual, predicted = [], []
     with torch.no_grad():
         for batch in loader:
+            logits, aux = model(**model_inputs_from_batch(batch, device))
             labels = batch["labels"].to(device)
-            logits, aux = standardize_model_output(model(**model_inputs_from_batch(batch, device)))
-            probabilities = logits.softmax(dim=-1)
+            actual.extend(labels.cpu().tolist())
+            predicted.extend(logits.argmax(-1).cpu().tolist())
+            class_probs = logits.softmax(-1)
             for class_id in labels.unique().tolist():
                 mask = labels == class_id
-                logits_by_class[class_id].append(logits[mask].detach().cpu())
-                probabilities_by_class[class_id].append(probabilities[mask].detach().cpu())
-
-            layer_routing = aux.get("layer_routing", {})
-            if not layer_routing and aux.get("probabilities") is not None:
-                layer_routing = {"classifier_moe": aux}
-            attention_mask = batch["attention_mask"].to(device)
-            token_labels = labels.unsqueeze(1).expand_as(attention_mask)
-            valid_tokens = attention_mask.bool()
-            for layer_name, info in layer_routing.items():
-                route_probabilities = info.get("probabilities")
-                top_indices = info.get("top_indices")
-                selected_assignments = info.get("selected")
-                if (
-                    route_probabilities is None
-                    or (top_indices is None and selected_assignments is None)
-                    or route_probabilities.shape[-1] == 0
-                ):
-                    continue
-                if route_probabilities.dim() == 2 and route_probabilities.shape[0] == labels.shape[0]:
-                    for class_id in labels.unique().tolist():
-                        class_mask = labels == class_id
-                        class_probabilities = route_probabilities[class_mask].detach().cpu()
-                        if class_probabilities.numel() == 0:
-                            continue
-                        record = routing[layer_name][class_id]
-                        probability_sum = class_probabilities.sum(dim=0)
-                        if selected_assignments is not None:
-                            assignment_counts = selected_assignments[class_mask].detach().cpu().sum(dim=0).long()
-                        else:
-                            class_indices = top_indices[class_mask].detach().cpu()
-                            assignment_counts = torch.bincount(
-                                class_indices.reshape(-1), minlength=route_probabilities.shape[-1]
-                            )
-                        record["probability_sum"] = (
-                            probability_sum
-                            if record["probability_sum"] is None
-                            else record["probability_sum"] + probability_sum
-                        )
-                        record["assignment_counts"] = (
-                            assignment_counts
-                            if record["assignment_counts"] is None
-                            else record["assignment_counts"] + assignment_counts
-                        )
-                        record["token_count"] += int(class_probabilities.shape[0])
-                    continue
-                route_probabilities = route_probabilities.reshape(
-                    labels.shape[0], attention_mask.shape[1], -1
-                )
-                selected_mask = info.get("selected_mask")
-                if selected_mask is not None:
-                    assignments = selected_mask.reshape(
-                        labels.shape[0], attention_mask.shape[1], -1
-                    )
-                else:
-                    top_indices = top_indices.reshape(labels.shape[0], attention_mask.shape[1], -1)
-                for class_id in labels.unique().tolist():
-                    mask = valid_tokens & (token_labels == class_id)
-                    class_probabilities = route_probabilities[mask].detach().cpu()
-                    if class_probabilities.numel() == 0:
-                        continue
-                    record = routing[layer_name][class_id]
-                    probability_sum = class_probabilities.sum(dim=0)
-                    if selected_mask is not None:
-                        assignment_counts = assignments[mask].detach().cpu().sum(dim=0).long()
-                    else:
-                        class_indices = top_indices[mask].detach().cpu()
-                        assignment_counts = torch.bincount(
-                            class_indices.reshape(-1), minlength=route_probabilities.shape[-1]
-                        )
-                    record["probability_sum"] = (
-                        probability_sum
-                        if record["probability_sum"] is None
-                        else record["probability_sum"] + probability_sum
-                    )
-                    record["assignment_counts"] = (
-                        assignment_counts
-                        if record["assignment_counts"] is None
-                        else record["assignment_counts"] + assignment_counts
-                    )
-                    record["token_count"] += int(class_probabilities.shape[0])
-
-    result: dict[str, Any] = {"logits_by_true_class": {}, "probabilities_by_true_class": {}, "routing_by_true_class": {}}
-    for class_id in sorted(logits_by_class):
-        name = _class_names(label_names, class_id)
-        result["logits_by_true_class"][name] = torch.cat(logits_by_class[class_id]).mean(dim=0).tolist()
-        result["probabilities_by_true_class"][name] = torch.cat(probabilities_by_class[class_id]).mean(dim=0).tolist()
-
-    for layer_name, class_records in routing.items():
-        result["routing_by_true_class"][layer_name] = {}
-        for class_id, record in sorted(class_records.items()):
-            name = _class_names(label_names, class_id)
-            count = max(record["token_count"], 1)
-            result["routing_by_true_class"][layer_name][name] = {
-                "mean_routing_probabilities": (record["probability_sum"] / count).tolist(),
-                "assignment_fractions": (record["assignment_counts"].float() / record["assignment_counts"].sum().clamp_min(1)).tolist(),
-                "token_count": record["token_count"],
-            }
+                name = label_names[class_id]
+                values = {"logits": logits[mask].sum(0).cpu(), "probabilities": class_probs[mask].sum(0).cpu()}
+                if name not in classification:
+                    classification[name] = {"example_count": 0, "logits": torch.zeros_like(values["logits"]),
+                                            "probabilities": torch.zeros_like(values["probabilities"])}
+                classification[name]["example_count"] += int(mask.sum())
+                for key, value in values.items():
+                    classification[name][key] += value
+            probabilities = aux.get("probabilities")
+            indices = aux.get("top_indices")
+            if probabilities is None or indices is None:
+                continue
+            labels = batch["labels"].to(device)
+            for class_id in labels.unique().tolist():
+                mask = labels == class_id
+                probs = probabilities[mask].detach().cpu()
+                record = records[label_names[class_id]]
+                counts = torch.bincount(indices[mask].reshape(-1).cpu(), minlength=probs.shape[-1])
+                record["example_count"] += int(mask.sum())
+                record["entropy_sum"] += float(-(probs * probs.clamp_min(1e-9).log()).sum())
+                for key, value in (("probability_sum", probs.sum(0)), ("assignment_counts", counts)):
+                    record[key] = value if record[key] is None else record[key] + value
+    result = {"scope": "example", "by_class": {}, "logits_by_true_class": {},
+              "probabilities_by_true_class": {},
+              "prediction_diagnostics": compute_prediction_diagnostics(actual, predicted, label_names)}
+    for name, record in classification.items():
+        result["logits_by_true_class"][name] = (record["logits"] / record["example_count"]).tolist()
+        result["probabilities_by_true_class"][name] = (record["probabilities"] / record["example_count"]).tolist()
+    for name, record in records.items():
+        count = record["example_count"]
+        result["by_class"][name] = {
+            "example_count": count, "routing_entropy": record["entropy_sum"] / count,
+            "mean_probabilities": (record["probability_sum"] / count).tolist(),
+            "assignment_counts": record["assignment_counts"].tolist(),
+            "expert_load_fractions": (record["assignment_counts"] / record["assignment_counts"].sum()).tolist()}
     return result

@@ -1,0 +1,2 @@
+base_config: ../../base/vihsd.yaml
+experiment_id: exp-005

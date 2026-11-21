@@ -1,4 +1,4 @@
-"""Load dataset ViHSD/Hugging Face và chuẩn bị PyTorch DataLoader.
+"""Load DatasetDict/Hugging Face và chuẩn bị PyTorch DataLoader.
 
 Hỗ trợ hai input mode, điều khiển bởi ``dataset.input_mode`` trong config:
 - ``"single"`` (mặc định): một text column → ``tokenizer(text, ...)``
@@ -8,7 +8,7 @@ Hỗ trợ hai input mode, điều khiển bởi ``dataset.input_mode`` trong co
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import torch
@@ -34,6 +34,7 @@ class DatasetBundle:
     label_names: list[str]
     label_mapping: dict[Any, int]
     num_labels: int
+    provenance: dict = field(default_factory=dict)
 
 
 def _ensure_splits(dataset: DatasetDict, config: dict) -> DatasetDict:
@@ -66,6 +67,13 @@ def _label_info(dataset, label_column: str, label_names_override: list[str] | No
     3. Unique value trong column sau khi sort.
     """
     if label_names_override:
+        if len(set(label_names_override)) != len(label_names_override):
+            raise ValueError("label_names must be unique")
+        values = dataset[label_column]
+        if all(isinstance(value, int) for value in values):
+            if any(value < 0 or value >= len(label_names_override) for value in values):
+                raise ValueError("Integer labels must index label_names")
+            return label_names_override, {i: i for i in range(len(label_names_override))}
         label_to_id = {name: idx for idx, name in enumerate(label_names_override)}
         return label_names_override, label_to_id
     feature = dataset.features.get(label_column)
@@ -78,7 +86,7 @@ def _label_info(dataset, label_column: str, label_names_override: list[str] | No
 def _load_raw(config: dict) -> DatasetDict:
     """Load raw dataset từ disk hoặc HuggingFace Hub.
 
-    Với ViHSD, ưu tiên bản segmented trên disk (data/vihsd_segmented).
+    Với ViHSD, ưu tiên bản segmented trên disk (data/processed/vihsd_segmented).
     Với dataset từ HuggingFace Hub, ví dụ uitnlp/ViANLI, load trực tiếp từ Hub
     khi không có DatasetDict local.
     """
@@ -89,25 +97,14 @@ def _load_raw(config: dict) -> DatasetDict:
 
     # --- Local disk path, dùng cho bản copy đã segment ---
     # Thử chính xác dataset name trước, nếu đó là local path như
-    # "data/vihsd_segmented" hoặc "data/vianli_segmented".
+    # "data/processed/vihsd_segmented" hoặc "data/processed/vianli_segmented".
     if os.path.isdir(dataset_name):
         from datasets import load_from_disk
         print(f"Loading preprocessed dataset from '{dataset_name}'...")
         return load_from_disk(dataset_name)
 
-    # Legacy fallback path cho ViHSD trên Kaggle hoặc local.
-    kaggle_path = "/kaggle/input/vihsd-segmented"
-    local_path = "data/vihsd_segmented"
-    repo_path = str(Path(__file__).resolve().parent.parent / "data" / "vihsd_segmented")
-
-    # Chỉ dùng fallback riêng cho ViHSD khi config thực sự trỏ tới dataset
-    # ViHSD segmented, tránh load nhầm dữ liệu.
-    if "vihsd" in dataset_name.lower():
-        for path in [local_path, repo_path, kaggle_path]:
-            if os.path.isdir(path):
-                from datasets import load_from_disk
-                print(f"Loading preprocessed dataset from '{path}'...")
-                return load_from_disk(path)
+    if Path(dataset_name).is_absolute() or dataset_name.startswith(("data/", "./")) or ":\\" in dataset_name or ":/" in dataset_name:
+        raise FileNotFoundError(f"Local DatasetDict not found: {dataset_name}; prepare or restore it first")
 
     # --- HuggingFace Hub ---
     dataset_config = config.get("config")
@@ -242,4 +239,8 @@ def prepare_data(config: dict) -> DatasetBundle:
         "validation": DataLoader(tokenized[config["validation_split"]], batch_size=config["batch_size"], num_workers=config["num_workers"]),
         "test": DataLoader(tokenized[config["test_split"]], batch_size=config["batch_size"], num_workers=config["num_workers"]),
     }
-    return DatasetBundle(tokenizer, loaders, label_names, label_to_id, len(label_names))
+    provenance = {"splits": {name: {"num_examples": len(split), "fingerprint": split._fingerprint}
+                             for name, split in raw.items()},
+                  "tokenizer_revision": tokenizer.init_kwargs.get("_commit_hash"),
+                  "tokenizer": config["tokenizer"]}
+    return DatasetBundle(tokenizer, loaders, label_names, label_to_id, len(label_names), provenance)

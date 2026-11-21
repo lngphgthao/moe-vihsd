@@ -6,7 +6,7 @@ import unittest
 import torch
 from torch import nn
 
-from train import create_optimizer_param_groups
+from src.training.engine import create_optimizer_param_groups
 from src.utils import apply_overrides, load_config
 from pathlib import Path
 
@@ -14,13 +14,13 @@ from pathlib import Path
 def make_model():
     model = nn.ModuleDict({
         "backbone": nn.ModuleDict({"dense": nn.Linear(2, 2), "router": nn.Linear(2, 2)}),
-        "classifier_moe": nn.ModuleDict({"expert": nn.Linear(2, 2), "router": nn.Linear(2, 2)}),
-        "nlimoe": nn.ModuleDict({"expert": nn.Linear(2, 2), "router": nn.Linear(2, 2)}),
+        "head": nn.ModuleDict({"expert": nn.Linear(2, 2), "router": nn.Linear(2, 2)}),
         "classifier": nn.Linear(2, 3),
         "router": nn.Linear(2, 2),
     })
     model["backbone"]["dense"].bias.requires_grad_(False)
     model["shared_alias"] = model["classifier"]
+    model.encoder = model["backbone"]
     return model
 
 
@@ -41,7 +41,7 @@ class TestOptimizerGroups(unittest.TestCase):
                         continue
                     if "router" in name.split(".")[:-1]:
                         expected = "router"
-                    elif name.startswith(("classifier_moe.", "nlimoe.", "classifier.")):
+                    elif id(parameter) not in {id(p) for p in model.encoder.parameters()}:
                         expected = "head"
                     else:
                         expected = "backbone"
@@ -69,7 +69,7 @@ class TestOptimizerGroups(unittest.TestCase):
     def test_base_configs_allow_cli_overrides(self):
         root = Path(__file__).resolve().parents[1]
         for dataset in ["vianli", "vihsd"]:
-            config = load_config(root / f"configs/{dataset}.yaml")
+            config = load_config(root / f"configs/base/{dataset}.yaml")
             self.assertIsNone(config["training"]["head_learning_rate"])
             self.assertIsNone(config["training"]["router_learning_rate"])
             apply_overrides(config, ["training.head_learning_rate=0.001", "training.router_learning_rate=0.002"])

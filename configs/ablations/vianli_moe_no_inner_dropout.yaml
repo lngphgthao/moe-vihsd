@@ -1,7 +1,0 @@
-# Cô lập biến nhiễu dropout bên trong expert khi so upcycle với FFN dense.
-# Chỉ đổi expert_inner_dropout so với YAML finalist hiện tại (E6, unverified).
-# TODO E4/E6 của finalist cần resolved config/checkpoint để xác minh lịch sử.
-base_config: ../finalists/vianli_best.yaml
-
-model:
-  expert_inner_dropout: 0.0

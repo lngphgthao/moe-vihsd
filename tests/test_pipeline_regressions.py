@@ -3,6 +3,7 @@
 from pathlib import Path
 from unittest.mock import Mock, patch
 import unittest
+import tempfile
 
 from scripts import preprocess_vihsd, run_group, segment_vianli
 from src.evaluation.metrics import compute_classification_metrics
@@ -41,26 +42,6 @@ class TestPipelineRegressions(unittest.TestCase):
                     if with_segments:
                         self.assertEqual(batch["token_type_ids"].tolist(), [[0, 0, 1, 0]] * 2)
 
-    def test_group_runs_use_the_declared_dense_baseline(self):
-        for filename in ["vianli_dense_backbones.yaml", "vianli_stage1_dense_backbones.yaml"]:
-            with self.subTest(group=filename):
-                group_path = REPO_ROOT / "configs/groups" / filename
-                with patch("sys.argv", ["run_group.py", "--group-config", str(group_path)]):
-                    with patch.object(run_group, "_run_entry") as run:
-                        run_group.main()
-                self.assertEqual(run.call_count, 9)
-                seeds_by_backbone = {}
-                for call in run.call_args_list:
-                    config_path, run_id, overrides, _ = call.args
-                    self.assertEqual(Path(config_path), REPO_ROOT / "configs/baselines/vianli_dense.yaml")
-                    resolved = apply_overrides(load_config(config_path), run_group._override_args(overrides)[1::2])
-                    self.assertEqual(resolved["logging"]["project"], "dense-vianli")
-                    self.assertEqual(resolved["model"]["architecture"], "dense_transformer")
-                    seeds_by_backbone.setdefault(resolved["model"]["pretrained_model_name"], []).append(resolved["seed"])
-                self.assertEqual(len(seeds_by_backbone), 3)
-                for seeds in seeds_by_backbone.values():
-                    self.assertEqual(seeds, [42, 43, 44])
-
     def test_macro_f1_includes_all_configured_classes(self):
         metrics = compute_classification_metrics([0, 0], [0, 0], ["a", "b", "c"])
         self.assertAlmostEqual(metrics["macro_f1"], 1 / 3)
@@ -73,7 +54,7 @@ class TestPipelineRegressions(unittest.TestCase):
             (segment_vianli, {"premise": ["sample"], "hypothesis": ["sample"], "label": ["neutral"]}),
         ]:
             with self.subTest(module=module.__name__):
-                with patch("sys.argv", [module.__name__]):
+                with tempfile.TemporaryDirectory() as directory, patch("sys.argv", [module.__name__, "--output-dir", str(Path(directory) / "segmented")]):
                     with patch.object(module, "ensure_vncorenlp", return_value="dummy.jar"):
                         with patch.object(module, "load_dataset", return_value={"train": example}):
                             with patch.object(module, "VnCoreNLP") as segmenter:

@@ -1,4 +1,4 @@
-"""Implementation loss function cho experiment ViHSD."""
+"""Task loss dùng chung cho phân lớp văn bản."""
 
 from __future__ import annotations
 

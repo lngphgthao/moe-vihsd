@@ -1,0 +1,17 @@
+base_config: ../../base/vihsd.yaml
+experiment_id: exp-006
+model:
+  head:
+    type: moe
+    pooling: cls
+    num_experts: 4
+    expert_hidden_dim: 512
+    activation: gelu
+    dropout: 0.1
+    classifier_dropout: 0.0
+    shared_expert: false
+    use_residual: false
+    router:
+      scoring: linear
+      selection: top_k
+      top_k: 2

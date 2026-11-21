@@ -1,7 +1,7 @@
 """Preprocess ViHSD bằng word segmentation của VnCoreNLP và lưu cache trên disk.
 
 Usage:
-    python scripts/preprocess_vihsd.py --output-dir data/vihsd_segmented
+    python scripts/preprocess_vihsd.py --output-dir data/processed/vihsd_segmented
 
 This script:
 1. Ensures VnCoreNLP model files exist (downloads automatically if needed).
@@ -15,7 +15,10 @@ import argparse
 import os
 import urllib.request
 from datasets import load_dataset
-from vncorenlp import VnCoreNLP
+try:
+    from vncorenlp import VnCoreNLP
+except ImportError:
+    VnCoreNLP = None
 from tqdm import tqdm
 
 
@@ -47,19 +50,24 @@ def segment_text(rdr: VnCoreNLP, text: str) -> str:
 def main():
     parser = argparse.ArgumentParser(description="Preprocess ViHSD with VnCoreNLP word segmentation")
     parser.add_argument("--dataset-name", default="uitnlp/vihsd", help="Hugging Face dataset name or path")
-    parser.add_argument("--output-dir", default="data/vihsd_segmented", help="Directory to save segmented dataset")
+    parser.add_argument("--output-dir", default="data/processed/vihsd_segmented", help="Directory to save segmented dataset")
     parser.add_argument("--vncorenlp-dir", default="vncorenlp", help="Directory where VnCoreNLP model is stored")
+    parser.add_argument("--revision", default="88e81b36ca376867640dad9df295e0f7d499ab80")
     args = parser.parse_args()
 
     print(f"=== ViHSD Word Segmentation Preprocessing ===")
     print(f"Dataset: {args.dataset_name}")
     print(f"Output:  {args.output_dir}")
 
+    if VnCoreNLP is None:
+        raise RuntimeError("Install vncorenlp from requirements.txt and Java before preprocessing")
+    if os.path.exists(args.output_dir):
+        raise FileExistsError(f"Refusing to overwrite dataset: {args.output_dir}")
     jar_path = ensure_vncorenlp(args.vncorenlp_dir)
     print("Initializing VnCoreNLP word segmenter...")
     with VnCoreNLP(jar_path, annotators="wseg", max_heap_size="-Xmx2g") as rdr:
         print(f"Loading raw dataset '{args.dataset_name}'...")
-        raw = load_dataset(args.dataset_name)
+        raw = load_dataset(args.dataset_name, revision=args.revision)
 
         def process_split(split_data, split_name):
             print(f"Segmenting '{split_name}' split ({len(split_data)} samples)...")

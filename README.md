@@ -1,436 +1,80 @@
-# Experiment Mixture of Experts trên ViHSD
+# Nghiên cứu MoE classification head
 
-This project trains and evaluates PhoBERT and Mixture of Experts (MoE) architectures for ViHSD. All experiments use the same configuration-driven workflow, run IDs, checkpoints, and saved metrics so model variants can be compared consistently.
+So sánh encoder dense với **head chuẩn Hugging Face** và **MoE head** trên ViANLI/ViHSD.
+MoE hiện dùng MLP expert hai lớp, linear scoring và top-k selection. LSTM/BiLSTM và
+router mới chưa được triển khai. Phạm vi: [THESIS_SPECIFICATION](docs/THESIS_SPECIFICATION.md).
+Implementation: [ARCHITECTURE](docs/ARCHITECTURE.md). Bước tiếp theo: [PLAN](experiments/PLAN.md).
 
-## Specification của luận văn
+## Môi trường
 
-For the thesis aim, scope, research questions, dataset/method details, experiment policy, current evidence gaps, timeline, and contributor workflow, start with [the thesis project specification](docs/THESIS_SPECIFICATION.md). It is the handoff document for understanding and continuing the research. Read [AGENTS.md](AGENTS.md), the tracked run ledger (`experiments/experiment_tracker.csv`), and the [experiment plan](experiments/EXPERIMENT_PLAN.md) before proposing or interpreting runs.
-
-## Chọn workflow
-
-| Workflow       | Start here                                                                                  |
-| -------------- | ------------------------------------------------------------------------------------------- |
-| Kaggle         | Open [main_kaggle.ipynb](notebooks/main_kaggle.ipynb) in Kaggle and follow the setup cells. |
-| Google Colab   | Open [main_colab.ipynb](notebooks/main_colab.ipynb) in Colab and follow the setup cells.    |
-| Local terminal | Install dependencies, authenticate Hugging Face, then run the commands below.               |
-
-### Thiết lập local
-
-Use Python 3.10 or newer. Install Java 8 or newer and ensure `java` is on `PATH`
-before running either word-segmentation script. `requirements.txt` includes the
-VnCoreNLP Python wrapper and pins Transformers to 5.5.0 for the encoder-layer
-contract used by Transformer-MoE. PyTorch 2.6 or newer also supports the pretrained
-weight-loading safety checks used by this Transformers version.
+Python >=3.10, PyTorch >=2.6; cài dependency theo requirements. Java >=8 và VnCoreNLP
+cần cho word segmentation. Giữ pin Transformers 5.5.0 trong requirements; xem phiên bản
+thực tế đã kiểm tra trong ARCHITECTURE trước khi so sánh môi trường.
 
 ```bash
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 hf auth login
-python train.py --config configs/vihsd.yaml --smoke-test --run-id smoke-check
+wandb login
+python -m unittest discover -s tests -v
 ```
 
-Run the offline regression tests from this directory with
-`python -m unittest discover -s tests -v`.
+Credentials lấy qua `HF_TOKEN`, `WANDB_API_KEY` hoặc secrets của nền tảng. Không commit `.env`.
+Không nâng dependency cùng lúc với thay đổi phương pháp nếu chưa kiểm chứng lại.
 
-Use the smoke test to verify the environment and dataset access. Training evaluates validation only; reserve `evaluate.py` for a finalist after its configuration and selection criteria are locked. For a full experiment, replace `--smoke-test` with `--no-smoke-test`.
+## Dữ liệu
 
-### Kaggle setup
-
-Open or import [main_kaggle.ipynb](notebooks/main_kaggle.ipynb) in a Kaggle Notebook:
-
-1. In the right-hand **Notebook settings** sidebar:
-   - **Accelerator**: select **GPU P100** or **GPU T4 x2**.
-   - **Internet**: toggle **Internet ON** (required for dataset download, model weights, and W&B).
-2. Under **Add-ons → Secrets**, add:
-   - `HF_TOKEN`: Hugging Face dataset and model access
-   - `WANDB_API_KEY`: Weights & Biases logging
-3. Run the setup cells in [main_kaggle.ipynb](notebooks/main_kaggle.ipynb) to configure outputs in `/kaggle/working/checkpoints` and `/kaggle/working/results`.
-4. To persist checkpoints and results permanently, use **"Save Version" → "Save & Run All (Commit)"**. Output files will be accessible under the notebook's **Output** tab.
-
-### Colab setup
-
-Open [main_colab.ipynb](notebooks/main_colab.ipynb) in Google Colab. The notebook:
-
-1. mounts Google Drive
-2. clones the repository and installs dependencies
-3. authenticates Hugging Face and W&B using Colab Secrets
-4. runs training and evaluation commands manually
-
-Before running the authentication cell, add these secrets in Colab's Secrets panel:
-
-| Secret          | Used for                              |
-| --------------- | ------------------------------------- |
-| `HF_TOKEN`      | Hugging Face dataset and model access |
-| `WANDB_API_KEY` | Weights & Biases logging              |
-
-The credentials are read at runtime and are not stored in the notebook, YAML files, or repository.
-
-## Model architectures
-
-The architectures are selected through the shared model factory in [src/models/factory.py](src/models/factory.py).
-
-Available architecture names:
-
-- `nlimoe`: shared pretrained encoder with mean pooling and sequence-level dynamic or top-k routing.
-- `transformer_moe` with `model.routing_method=dynamic_threshold`: token-level dynamic-threshold routing inside the selected transformer FFNs. `top_k` remains the default.
-
-- `transformer_moe` — true token-level MoE Transformer: loads a compatible BERT/RoBERTa-family encoder and replaces selected internal FFNs with Sparse MoE layers in [src/models/moe/layer.py](src/models/moe/layer.py)
-- `phobert_moe` — compatibility alias for older MoE configurations
-- `dense_transformer` — generic dense classifier for any compatible Hugging Face encoder
-- `dense_phobert` — compatibility alias for `dense_transformer`
-- `classifier_moe` — dense encoder followed by a pooled-representation MoE head
-- `hybrid_moe` — Transformer-MoE encoder followed by a Classifier-MoE head
-
-Select an architecture in the YAML file or override it for one run. No code changes are required.
-
-### Tái triển khai NLIMoE trên ViANLI
-
-Dùng `configs/architectures/vianli_nlimoe_dynamic.yaml` cho 7 expert Dynamic
-hoặc `configs/architectures/vianli_nlimoe_topk.yaml` cho 5 expert Top-4.
-Cả hai dùng XLM-R-base theo ngân sách GPU, expert dropout 0.4, classifier
-dropout 0.0, batch 16 và 7 epoch. Revision dữ liệu/model/tokenizer được cố định.
-
-`training.eval_frequency=400` được hiểu là 400 optimizer step, đếm liên tục
-qua các epoch. Mỗi mốc đánh giá toàn bộ validation, cùng một lần ở bước cuối
-nếu cần. Cấu hình `null` dùng lịch mỗi epoch. Trong bài, đơn vị 400 chưa được
-xác nhận. Các giả định về lịch đánh giá, straight-through estimator và fallback
-được ghi tại [D005](docs/DECISIONS.md#d005--chuẩn-bị-tái-triển-khai-nlimoe-trên-xlm-r-base).
-
-Chạy từ thư mục `code/`, dùng run ID mới đã ghi nhận cho lần thực thi.
+XLM-R/mBERT dùng text gốc; PhoBERT cần bản segmented tương ứng. Config ViANLI mẫu
+chạy XLM-R từ Hub có revision; config ViHSD mẫu chạy PhoBERT với DatasetDict local.
+Không dùng segmentation của PhoBERT ngầm định cho mọi backbone.
 
 ```bash
-python train.py --config configs/architectures/vianli_nlimoe_dynamic.yaml --no-smoke-test --run-id run-003
+python scripts/segment_vianli.py --output-dir data/processed/vianli_segmented
+python scripts/preprocess_vihsd.py --output-dir data/processed/vihsd_segmented
+python scripts/count_labels.py --config configs/base/vihsd.yaml --json
 ```
 
-Theo dõi `global_step` trong W&B và `training_history.json`. Chọn checkpoint
-bằng validation macro F1. Test được đánh giá sau khi khóa finalist bằng
-`evaluate.py --final-evaluation` với cấu hình và run ID tương ứng.
+Script từ chối ghi đè dataset đã tồn tại. Máy hiện tại đã giữ hai bản segmented tại
+`data/processed/`; clone mới cần chạy preprocessing hoặc khôi phục từ storage bên ngoài.
+[Manifest dữ liệu](data/manifests/) ghi checksum và giới hạn provenance của bản lịch sử.
 
-Example dynamic-routing run (uses validation for checkpoint selection like the other architectures):
+## Chạy
 
 ```bash
-python train.py --config configs/vihsd.yaml --no-smoke-test \
-  --run-id dynamic-moe-s42 --set model.architecture=nlimoe --set seed=42
+python train.py --config configs/experiments/vianli/exp-003.yaml --smoke-test
+python train.py --config configs/experiments/vianli/exp-004.yaml --no-smoke-test
+python scripts/run_group.py --group-config configs/groups/vianli_screening.yaml --no-smoke-test
+python scripts/aggregate_results.py --runs-dir runs --output-dir runs/analysis
 ```
 
-To keep the token-level Transformer MoE and switch only its router:
+CLI cấp ID kế tiếp nếu không truyền `--run-id`; group dùng ID đã đăng ký rõ ràng.
+Run ID dùng một lần, retry cấp ID mới. Điều phối bằng tracker chung trước khi phân
+phối nhiều máy. Screening dùng seed 42; seed cuối chưa khóa.
+`--set training.head_learning_rate=0.0001` và các override khác chỉ nhận key có trong
+resolved config. Đổi cấu hình nghiên cứu đã chạy cần experiment ID mới.
+
+`runs/<run_id>/` giữ manifest, config, labels, native HF config, metrics JSONL, summary,
+console, checkpoint và diagnostics. W&B và tracker cùng liên kết run ID. Đặt `RUNS_DIR`
+để lưu ra ổ khác; khi W&B lỗi, local logging vẫn tiếp tục và `wandb_sync=pending`.
+Các score dùng thang 0–1; thiếu metric giữ trống.
+
+Test chỉ dành cho finalist có config đầy đủ và `finalization` đã khóa. Không có finalist
+mặc định. Khi đã chốt quyết định và seed:
 
 ```bash
-python train.py --config configs/vihsd.yaml --no-smoke-test \
-  --run-id phobert-moe-dynamic-router-s42 \
-  --set model.architecture=transformer_moe \
-  --set model.routing_method=dynamic_threshold --set seed=42
+python evaluate.py --run-dir runs/<run_id> --finalist-config configs/finalists/<dataset>/<experiment_id>.yaml --final-evaluation
 ```
 
-Example:
-
-```bash
-# True MoE Transformer (Full fine-tuning, default):
-python train.py --config configs/vihsd.yaml --set model.architecture=transformer_moe --run-id transformer-moe-full
-
-# True MoE Transformer (Parameter-efficient / frozen attention):
-python train.py --config configs/vihsd.yaml --set model.architecture=transformer_moe --set model.freeze_attention=true --run-id transformer-moe-peft
-
-# Dense baseline:
-python train.py --config configs/vihsd.yaml --set model.architecture=dense_phobert --set model.pooling=mean --run-id dense-phobert-integrated
-```
-
-The YAML default is:
-
-```yaml
-model:
-  architecture: transformer_moe
-  pretrained_model_name: vinai/phobert-base
-```
-
-All model architectures load the encoder from `model.pretrained_model_name`. Training and
-evaluation automatically use the same model as the tokenizer, so changing this one value is
-enough for compatible multilingual encoders:
-
-```bash
-# XLM-R MoE
-python train.py --config configs/vihsd.yaml --no-smoke-test \
-  --run-id xlmr-moe-s42 --set model.pretrained_model_name=xlm-roberta-base
-
-# mBERT dense baseline
-python train.py --config configs/vihsd.yaml --no-smoke-test \
-  --run-id mbert-dense-s42 --set model.architecture=dense_transformer \
-  --set model.pretrained_model_name=bert-base-multilingual-cased \
-  --set model.pooling=cls
-```
-
-`transformer_moe` requires a BERT/RoBERTa-style encoder with `encoder.layer`; XLM-R and mBERT
-are supported. Other Hugging Face encoders can be used with `dense_transformer` when they
-provide `last_hidden_state` and a `hidden_size` configuration value.
-
-## Argument reference
-
-### Command-line arguments
-
-| Command       | Argument                           | Default                | What it does                                                            |
-| ------------- | ---------------------------------- | ---------------------- | ----------------------------------------------------------------------- |
-| `train.py`    | `--config PATH`                    | `configs/vihsd.yaml`   | Loads the YAML configuration and optional `base_config`.                |
-| `train.py`    | `--set SECTION.KEY=VALUE`          | none                   | Overrides an existing YAML value; repeat it for multiple overrides.     |
-| `train.py`    | `--smoke-test` / `--no-smoke-test` | config value (`false`) | Selects the short validation profile or the full experiment profile.    |
-| `train.py`    | `--run-id ID`                      | timestamped ID         | Names the checkpoint and results directory. Use a unique ID per run.    |
-| `evaluate.py` | `--config PATH`                    | `configs/vihsd.yaml`   | Supplies the configuration used to rebuild the model and data pipeline. |
-| `evaluate.py` | `--run-id ID`                      | latest run             | Evaluates a saved run and loads its resolved configuration.             |
-| `evaluate.py` | `--checkpoint PATH`                | none                   | Evaluates one explicit `.safetensors` checkpoint.                       |
-| `evaluate.py` | `--final-evaluation`               | required               | Confirms the finalist config and seed set are locked before test access. |
-
-### Configuration arguments
-
-These are the defaults from `configs/vihsd.yaml`. A child config can override them, and
-`--set` can override them for one run.
-
-| Key                                | Default                | What it does                                                                                                                   |
-| ---------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `seed`                             | `42`                   | Seeds Python, NumPy, and PyTorch for reproducible runs.                                                                        |
-| `dataset.name`                     | `data/vihsd_segmented` | Dataset path or Hugging Face dataset ID.                                                                                       |
-| `dataset.tokenizer`                | `vinai/phobert-base`   | Fallback tokenizer. It is automatically replaced by `model.pretrained_model_name` when that value is set.                      |
-| `dataset.max_length`               | `128`                  | Maximum token sequence length; longer inputs are truncated and shorter inputs are padded.                                      |
-| `model.architecture`               | `transformer_moe`      | Selects `transformer_moe`, `dense_transformer`, or compatibility aliases.                                                      |
-| `model.pretrained_model_name`      | `vinai/phobert-base`   | Hugging Face model ID or local path for the encoder and tokenizer. Change this for XLM-R or mBERT.                             |
-| `model.moe_layers`                 | `[8, 9, 10, 11]`       | Zero-based encoder layers whose FFNs are replaced by MoE. Supports lists and values such as `all`, `last_4`, or `alternating`. |
-| `model.num_experts`                | `4`                    | Number of routed experts per MoE layer. Set to `0` for shared-expert-only controls.                                            |
-| `model.top_k`                      | `1`                    | Number of experts selected for each token.                                                                                     |
-| `model.upcycle`                    | `true`                 | Initializes GELU experts from the pretrained FFN weights.                                                                      |
-| `model.shared_expert`              | `false`                | Adds an always-active expert alongside routed experts.                                                                         |
-| `model.expert_type`                | `gelu`                 | Expert FFN type: `gelu`, `geglu`, or `swiglu`. Gated types require `upcycle=false`.                                            |
-| `model.expert_hidden_size`         | `null`                 | Expert intermediate width; `null` uses the backbone FFN width.                                                                 |
-| `model.expert_init_noise`          | `0.0`                  | Adds Gaussian noise to expert initialization after upcycling.                                                                  |
-| `model.learnable_residual_scale`   | `false`                | Learns the MoE residual multiplier instead of keeping it fixed.                                                                |
-| `model.residual_scale_init`        | `1.0`                  | Initial value of the MoE residual multiplier.                                                                                  |
-| `model.freeze_attention`           | `false`                | Freezes attention modules and dense FFNs in non-MoE layers.                                                                    |
-| `model.freeze_embeddings`          | `false`                | Freezes the backbone embedding parameters.                                                                                     |
-| `model.freeze_backbone`            | `false`                | Freezes the complete encoder for dense or sentence-level classifiers.                                                          |
-| `model.pooling`                    | `cls`                  | Sequence pooling: `cls` uses the first token; `mean` averages non-padding tokens.                                              |
-| `model.dropout`                    | `0.1`                  | Dropout used by classifier and legacy MoE heads.                                                                               |
-| `training.epochs`                  | `5`                    | Number of full training epochs.                                                                                                |
-| `training.batch_size`              | `16`                   | Examples processed per optimization step.                                                                                      |
-| `training.learning_rate`           | `0.00002`              | AdamW learning rate.                                                                                                           |
-| `training.weight_decay`            | `0.01`                 | AdamW L2-style weight decay.                                                                                                   |
-| `training.loss_type`               | `cross_entropy`        | Task loss: `cross_entropy`, weighted cross-entropy, or focal loss.                                                             |
-| `routing.load_balance_loss_factor` | `0.01`                 | Weight of the auxiliary MoE load-balancing loss. Use `0.0` for dense controls.                                                 |
-| `logging.use_wandb`                | `true`                 | Enables Weights & Biases logging; set `false` when W&B is unavailable.                                                         |
-
-For example, switching the complete pipeline to XLM-R requires only:
-
-```bash
-python train.py --config configs/vihsd.yaml --no-smoke-test \
-  --run-id xlmr-moe-s42 \
-  --set model.pretrained_model_name=xlm-roberta-base
-```
-
-## Run an experiment
-
-Training and evaluation are separate commands. Always use a unique `--run-id` for a new experiment.
-
-### Dense baseline cho ViANLI
-
-Use the unified YAML group runner to compare dense Hugging Face encoders and seeds. Each run
-gets a unique generated ID and uses the same trainer, validation selection, checkpoint format,
-and optional W&B logging.
-
-```bash
-python scripts/run_group.py \
-  --group-config configs/groups/vianli_stage1_dense_backbones.yaml \
-  --no-smoke-test
-```
-
-The runner reuses the shared trainer, selects the best checkpoint by validation macro F1,
-and saves the resolved config, checkpoint, history, and metrics under `checkpoints/` and
-`results/`. Prepare the local dataset first when needed:
-
-```bash
-python scripts/segment_vianli.py --output-dir data/vianli_segmented
-```
-
-### Train
-
-```bash
-python train.py \
-  --config configs/vihsd.yaml \
-  --no-smoke-test \
-  --run-id phobert-moe-integrated \
-  --set model.architecture=transformer_moe
-```
-
-For the dense PhoBERT baseline, use the integrated pipeline so the dataset,
-seed, optimizer, loss, validation selection, checkpoint format, and result
-schema are identical to the MoE runs:
-
-```bash
-python train.py \
-  --config configs/vihsd.yaml \
-  --no-smoke-test \
-  --run-id dense-phobert-integrated \
-  --set model.architecture=dense_phobert \
-  --set model.pooling=mean \
-  --set training.loss_type=cross_entropy \
-  --set routing.load_balance_loss_factor=0.0
-```
-
-`routing.load_balance_loss_factor=0.0` is
-explicit documentation that the dense model has no routing loss; it does not
-change the result because the dense model returns no auxiliary loss.
-
-Each new run stores its checkpoint using the architecture name, for example
-`dense_phobert_best.safetensors` or `phobert_moe_best.safetensors`. Evaluation
-also accepts the older `vihsd_moe_best.safetensors` name, so existing runs are
-still usable. To debug a run, inspect these files in order:
-
-1. `checkpoints/<run-id>/resolved_config.yaml` for the exact configuration.
-2. `checkpoints/<run-id>/*_metadata.json` for the architecture and checkpoint.
-3. `results/<run-id>/hyperparameters.json` and `run_metrics.json` for settings and metrics.
-
-After locking the finalist configuration and seed set from validation results, evaluate the finalist with the same command:
-
-```bash
-python evaluate.py --final-evaluation --config configs/vihsd.yaml --run-id <locked-finalist-run-id>
-```
-
-### Evaluate
-
-```bash
-python evaluate.py \
-  --final-evaluation \
-  --config configs/vihsd.yaml \
-  --run-id phobert-moe-integrated
-```
-
-Evaluation reloads the best checkpoint for that run. To evaluate a checkpoint directly:
-
-```bash
-python evaluate.py \
-  --final-evaluation \
-  --config configs/vihsd.yaml \
-  --checkpoint checkpoints/<run-id>/<architecture>_best.safetensors
-```
-
-### Override thiết lập cho một run
-
-Use repeated `--set section.key=value` options. The YAML file is not modified, and only existing keys can be overridden.
-
-```bash
-python train.py \
-  --config configs/vihsd.yaml \
-  --no-smoke-test \
-  --run-id phobert-moe-experiment \
-  --set model.architecture=transformer_moe \
-  --set model.num_experts=4 \
-  --set model.top_k=1 \
-  --set training.loss_type=cross_entropy
-```
-
-Supported task losses are `cross_entropy`, `weighted_cross_entropy`, and `focal`.
-For class-weighted CE, provide one weight per class, for example:
-
-```bash
-python train.py \
-  --config configs/vihsd.yaml \
-  --set training.loss_type=weighted_cross_entropy \
-  --set 'training.class_weights=[1.0,1.5,2.0]' \
-  --run-id weighted-ce
-```
-
-Focal loss uses `training.focal_gamma` (default `2.0`) and optionally applies the
-same `training.class_weights` as its class-balancing factor:
-
-```bash
-python train.py \
-  --config configs/vihsd.yaml \
-  --set training.loss_type=focal \
-  --set training.focal_gamma=2.0 \
-  --run-id focal
-```
-
-Values are parsed as YAML. Use `true`, `false`, `null`, numbers, quoted strings, or YAML lists as needed.
-
-### Thứ tự tuning
-
-| Priority | Settings                                                           | Compact guidance                                                                                                |
-| -------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
-| 1        | `training.learning_rate`, `training.epochs`, `training.loss_type`  | Start with conservative learning rates and use a stable task loss; focal loss is available for class imbalance. |
-| 2        | `model.architecture`, `model.num_experts`, `model.top_k`           | Compare dense PhoBERT with PhoBERT MoE using the same workflow. Keep `1 <= top_k <= num_experts`.               |
-| 3        | `model.model_dim`, `model.expert_hidden_dim`, `dataset.max_length` | Increase capacity carefully; this raises capacity and memory use.                                               |
-| 4        | `training.weight_decay`, `model.dropout`                           | Regularization tuning is helpful when validation performance starts to diverge from training performance.       |
-| 5        | `model.expert_hidden_dim`, `training.batch_size`                   | Secondary capacity and optimization controls.                                                                   |
-
-## Output và run ID
-
-Each training run receives a unique Hanoi-time (`UTC+07:00`) timestamp and profile identifier, for example:
-
-```text
-20260822T213015+0700-full
-20260822T214420+0700-smoke
-```
-
-Checkpoints and results are stored in matching run folders. The latest run is recorded in `checkpoints/latest_run.json` and `results/latest_run.json`, so evaluation without `--run-id` uses the newest run.
-
-Important files in `results/<run-id>/`:
-
-| File                     | Contents                                 |
-| ------------------------ | ---------------------------------------- |
-| `run_metrics.json`       | Best train and validation metrics        |
-| `training_history.json`  | Metrics for every training epoch         |
-| `hyperparameters.json`   | Resolved settings, including dotted keys |
-| `vihsd_predictions.json` | Saved test predictions, when generated   |
-
-`run_metrics.json` records train and validation metrics only. The best checkpoint is selected by validation Macro F1. Run `evaluate.py` only after locking the finalist configuration and seed set to produce test metrics and prediction diagnostics; never use those test results to choose configurations or checkpoints. Smoke checks and screening runs should not be evaluated on test.
-
-To evaluate an older run, pass its identifier:
-
-```bash
-python evaluate.py --final-evaluation --config configs/vihsd.yaml --run-id 20260822T143015Z-full
-```
-
-The YAML defaults to full training. Use `--smoke-test` for the short profile and `--no-smoke-test` to explicitly force the full profile. The smoke profile uses `training.smoke.epochs` and `training.smoke.max_train_samples`; the full profile uses the top-level `training.epochs` and `training.max_train_samples` values.
-
-## Lưu trữ và authentication
-
-The default checkpoint path is the local `checkpoints` folder.
-
-- **Kaggle**: The notebook sets `CHECKPOINT_DIR` to `/kaggle/working/checkpoints` and `RESULTS_DIR` to `/kaggle/working/results`. Use **"Save Version" → "Save & Run All (Commit)"** so outputs persist in the notebook's **Output** tab. Authenticate by adding `HF_TOKEN` and `WANDB_API_KEY` under **Add-ons → Secrets**.
-- **Colab**: The notebook sets `CHECKPOINT_DIR` and `RESULTS_DIR` to Google Drive folders so outputs persist after the runtime ends. Authenticate via Colab's **Secrets** panel (`HF_TOKEN` and `WANDB_API_KEY`).
-- **Local terminal**:
-  ```bash
-  hf auth login
-  wandb login --verify
-  ```
-
-Credentials are read at runtime and are not stored in the notebook, YAML files, or repository. No `.env` file is used.
-
-### Tải metrics W&B về máy
-
-Chạy từ thư mục `code/`, thay `ENTITY/PROJECT` bằng đường dẫn project trên W&B.
-
-```bash
-wandb login --verify
-python scripts/sync_wandb.py ENTITY/PROJECT
-```
-
-Chọn run cụ thể bằng `--run-id` (có thể lặp lại) và đổi thư mục lưu bằng `--output-dir`.
-
-```bash
-python scripts/sync_wandb.py ENTITY/PROJECT --run-id abc123 --run-id def456
-python scripts/sync_wandb.py ENTITY/PROJECT --output-dir D:/experiment_exports
-```
-
-- Mặc định lưu tại `code/results/wandb/<entity>/<project>/<wandb_run_id>.json`, độc lập với thư mục terminal hiện tại. Output mặc định được Git ignore và agent có thể đọc trực tiếp.
-- Mỗi snapshot chứa `metadata`, `config`, `summary`, `history` và thời điểm hoàn tất export UTC. Metadata giữ W&B ID, tên, URL, trạng thái, tags, notes và `verification: unverified` để ghi nhận nguồn chưa được đối chiếu.
-- Dùng `scan_history()` để lấy toàn bộ history còn lưu trên W&B, bao gồm các dòng có bộ metric khác nhau. History được ghi tuần tự để giới hạn bộ nhớ. Metric NaN/Infinity được xuất thành `null`; các field credential thông dụng được thay bằng `[REDACTED]`.
-- Chạy lại lệnh để tải lại và cập nhật snapshot, kể cả run đang chạy. File cũ được thay thế nguyên tử sau khi tải xong. Khi chạy đồng thời, bản hoàn tất ghi sau cùng sẽ được giữ. Run đang chạy có thể phát sinh thêm metrics trong lúc export.
-- Lỗi từng run được báo qua stderr và các run tiếp theo vẫn được xử lý. Exit code là `1` nếu có lỗi, `0` nếu thành công. Lỗi khi liệt kê project kết thúc lượt đồng bộ; chạy lại lệnh để thử lại.
-- Phạm vi tải gồm config, summary và history đã gửi lên W&B. File, media và artifacts cần được tải riêng. Các file JSON kết quả chỉ nằm trên Colab/Kaggle cần được upload trước khi có thể lấy từ W&B.
-- Snapshot giữ schema W&B để phân tích trực tiếp; công cụ `aggregate_results.py` hiện đọc schema kết quả training cục bộ.
-
-## Ghi chú runtime
-
-- Set `logging.use_wandb: true` in the YAML to enable W&B logging.
-- Tokenization uses `dataset.tokenization_num_proc` workers and the Hugging Face cache. Set it to `1` if multiprocessing is unavailable.
-- Data loading defaults to `training.num_workers: 0`, which is safest in Colab/Jupyter. For a script-only local run, you can increase it with `--set training.num_workers=2`.
-- Already-tokenized data is reused from cache on later runs.
-- `seed` affects repeatability, not expected average performance; use several seeds for final comparisons.
-- `max_train_samples` and `smoke_test` are for fast debugging, not final experiments.
-- `num_workers`, output paths, and W&B settings do not change model quality.
-- `routing.load_balance_loss_factor` controls the weight of the auxiliary balance loss added to the task loss during training. Set it to `0.0` to disable balancing entirely.
+Evaluator kiểm tra config/seed/provenance, dựng model từ HF config đã lưu và nạp checkpoint;
+không tìm “latest run” và không dùng config nền hiện tại để dựng lại model.
+
+## Notebook và lịch sử
+
+[Colab](notebooks/main_colab.ipynb) và [Kaggle](notebooks/main_kaggle.ipynb) chỉ setup,
+chọn config, đặt output root và gọi entry point chung. Không chứa logic train/model riêng.
+Lưu toàn bộ thư mục run khi tải output hoặc kết thúc phiên GPU. Notebook clone nhánh
+`classifier-main`; cần push thay đổi hoặc upload checkout mới trước khi dùng trên cloud.
+
+Lịch sử trước refactor: nhánh `refactor`, commit
+`c04f25d05d8802c8a32d26eb1d6a6b53e2781adf`. Transformer-MoE, Hybrid, NLIMoE, bản thảo và
+metric cũ nằm tại đó; repo hiện hành không nạp checkpoint/config cũ. Baseline Linear cũ
+khác head chuẩn mới nên metric cũ không được nhập vào bảng so sánh mới.

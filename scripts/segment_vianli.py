@@ -1,7 +1,7 @@
 """Preprocess ViANLI bằng word segmentation của VnCoreNLP và lưu cache trên disk.
 
 Usage trên Kaggle hoặc local, yêu cầu Java >= 8:
-    python scripts/segment_vianli.py --output-dir data/vianli_segmented
+    python scripts/segment_vianli.py --output-dir data/processed/vianli_segmented
 
 Script này:
 1. Bảo đảm file model VnCoreNLP tồn tại, tự download nếu cần.
@@ -20,7 +20,10 @@ import argparse
 import os
 import urllib.request
 from datasets import load_dataset, DatasetDict
-from vncorenlp import VnCoreNLP
+try:
+    from vncorenlp import VnCoreNLP
+except ImportError:
+    VnCoreNLP = None
 from tqdm import tqdm
 
 
@@ -76,21 +79,26 @@ def main():
     )
     parser.add_argument("--dataset-name", default="uitnlp/ViANLI",
                         help="HuggingFace dataset name")
-    parser.add_argument("--output-dir", default="data/vianli_segmented",
+    parser.add_argument("--output-dir", default="data/processed/vianli_segmented",
                         help="Directory to save segmented dataset")
     parser.add_argument("--vncorenlp-dir", default="vncorenlp",
                         help="Directory where VnCoreNLP model files are stored")
+    parser.add_argument("--revision", default="0fec8d6ecb043a61c609f9b51f80401fdf1e84d3")
     args = parser.parse_args()
 
     print("=== ViANLI Word Segmentation Preprocessing ===")
     print(f"Dataset: {args.dataset_name}")
     print(f"Output:  {args.output_dir}")
 
+    if VnCoreNLP is None:
+        raise RuntimeError("Install vncorenlp from requirements.txt and Java before preprocessing")
+    if os.path.exists(args.output_dir):
+        raise FileExistsError(f"Refusing to overwrite dataset: {args.output_dir}")
     jar_path = ensure_vncorenlp(args.vncorenlp_dir)
     print("Initializing VnCoreNLP word segmenter...")
     with VnCoreNLP(jar_path, annotators="wseg", max_heap_size="-Xmx2g") as rdr:
         print(f"Loading raw dataset '{args.dataset_name}' from HuggingFace Hub...")
-        raw = load_dataset(args.dataset_name)
+        raw = load_dataset(args.dataset_name, revision=args.revision)
         print(f"Splits: { {k: len(v) for k, v in raw.items()} }")
 
         processed_dict = {}
@@ -113,7 +121,7 @@ def main():
             print(f"  Label:                {processed_dataset['train']['label'][i]}")
 
     print(f"\n[DONE] Successfully segmented and cached ViANLI to '{args.output_dir}'.")
-    print("Run training with: python train.py --config configs/vianli.yaml --no-smoke-test ...")
+    print("Run training with: python train.py --config configs/base/vianli.yaml --no-smoke-test ...")
 
 
 if __name__ == "__main__":

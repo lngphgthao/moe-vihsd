@@ -1,4 +1,4 @@
-"""Tiện ích classification metric cho evaluation và training ViHSD."""
+"""Classification metric dùng chung cho train và evaluation."""
 
 from __future__ import annotations
 

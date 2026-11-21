@@ -1,73 +1,45 @@
-# Python caches and local tooling
+# Python/runtime caches and local environments
 __pycache__/
 *.py[cod]
-*.pyo
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 .ipynb_checkpoints/
-/moe_vihsd.ipynb
-
-# Local Python environments and secrets
-.env
-.env.*
-!.env.example
 .venv/
 venv/
 env/
-.python-version
-
-# OS and editor files
-.DS_Store
-Thumbs.db
-.vscode/
-.idea/
-
-# Downloaded datasets and local data artifacts
-data/raw/
-data/processed/
-data/cache/
-data/vianli_segmented/
-data/vihsd_segmented/
-*.csv
-experiments/**
-!experiments/experiment_tracker.csv
-*.jsonl
+# Credentials
+.env
+.env.*
+!.env.example
+# Runtime artifacts; manifests and research CSVs remain versioned
+/data/raw/
+/data/processed/
+/data/cache/
+/data/vianli_segmented/
+/data/vihsd_segmented/
+/runs/
+/results/
+/checkpoints/
+/wandb/
+/logs/
+/tensorboard/
+/vncorenlp/
+/.agent/
+/.refactor_*.py
 *.arrow
 *.parquet
-*.zip
-!data/manifests/
-!data/manifests/**
-
-# Training outputs and local experiment artifacts
-results/
-checkpoints/*
-runs/
-wandb/
-tensorboard/
-logs/
-
-# Large model files and serialized weights
+*.safetensors
 *.pt
 *.pth
 *.ckpt
 *.bin
-*.safetensors
 *.onnx
-
-# Temporary files
+# Local tooling
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
 *.tmp
 *.temp
 *.bak
-
-# Versioned governance and research records
-# Keep the repository rules, architecture decisions, plans, notes, and results
-# reviewable in a fresh clone. Runtime outputs remain ignored above.
-!/AGENTS.md
-!/docs/
-!/docs/**
-!/experiments/
-!/experiments/**
-!/tasks/
-!/tasks/**
-.agent/

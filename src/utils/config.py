@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import random
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -66,16 +65,6 @@ def flatten_hyperparameters(values: dict[str, Any], prefix: str = "") -> dict[st
     return flattened
 
 
-def create_run_id(smoke_test: bool, requested_run_id: str | None = None) -> str:
-    """Tạo run ID có timestamp theo timezone Asia/Ho_Chi_Minh hoặc giữ ID được yêu cầu."""
-    if requested_run_id:
-        return requested_run_id
-    hanoi_timezone = timezone(timedelta(hours=7), name="Asia/Ho_Chi_Minh")
-    timestamp = datetime.now(hanoi_timezone).strftime("%Y%m%dT%H%M%S")
-    profile = "smoke" if smoke_test else "full"
-    return f"{timestamp}-{profile}"
-
-
 def apply_overrides(config: dict, overrides: list[str]) -> dict:
     """Áp dụng override ``section.key=value`` sau khi parse như YAML scalar."""
     for override in overrides:
@@ -94,21 +83,3 @@ def apply_overrides(config: dict, overrides: list[str]) -> dict:
             raise KeyError(f"Unknown configuration key {key_path!r}.")
         target[keys[-1]] = yaml.safe_load(raw_value)
     return config
-
-
-def find_run_checkpoint(run_dir: Path, architecture: str) -> Path:
-    """Tìm checkpoint, hỗ trợ cả run folder mới và legacy."""
-    candidates = [
-        run_dir / f"{architecture}_best.safetensors",
-        run_dir / "vihsd_moe_best.safetensors",
-    ]
-    for candidate in candidates:
-        if candidate.exists():
-            return candidate
-    discovered = sorted(run_dir.glob("*_best.safetensors"))
-    if len(discovered) == 1:
-        return discovered[0]
-    if not discovered:
-        raise FileNotFoundError(f"No checkpoint found in run directory: {run_dir}")
-    names = ", ".join(path.name for path in discovered)
-    raise RuntimeError(f"Multiple checkpoints found in {run_dir}; choose one with --checkpoint: {names}")

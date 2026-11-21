@@ -1,150 +1,103 @@
-"""Đánh giá checkpoint ViHSD đã lưu và ghi prediction dạng JSON."""
-
-from __future__ import annotations
-
+"""Đánh giá test bằng resolved config của một run và finalist đã khóa."""
 import argparse
 import csv
 import json
-import os
-import sys
 from pathlib import Path
-
-# Bảo đảm Git root có trong sys.path khi chạy từ Colab.
-REPO_ROOT = str(Path(__file__).resolve().parent)
-if REPO_ROOT not in sys.path:
-    sys.path.insert(0, REPO_ROOT)
-
 import torch
-import torch.nn.functional as F
 import yaml
 from safetensors.torch import load_file
-from tqdm.auto import tqdm
-
-from src.models.factory import build_model, model_inputs_from_batch, standardize_model_output
-from src.data.loader import prepare_data
-from src.evaluation.metrics import (
-    compute_classification_metrics,
-    compute_prediction_diagnostics,
-    format_classification_report,
-)
-from src.utils import find_run_checkpoint, load_config, resolve_output_path
+from src.models.factory import build_model, model_inputs_from_batch
+from src.training.engine import prepare_run_data
+from src.evaluation.metrics import compute_classification_metrics, compute_prediction_diagnostics
+from src.utils import load_config, set_seed
+from src.utils.artifacts import TRACKER, config_fingerprint, now, update_tracker, write_json
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", default="configs/vihsd.yaml")
-    parser.add_argument("--checkpoint", default=None)
-    parser.add_argument("--run-id", default=None, help="Evaluate a specific run directory.")
-    parser.add_argument(
-        "--final-evaluation",
-        action="store_true",
-        help="Confirm the finalist configuration and seed set are locked before test evaluation.",
-    )
-    args = parser.parse_args()
-    if not args.final_evaluation:
-        parser.error(
-            "test evaluation is reserved for locked finalists; pass --final-evaluation "
-            "only after configuration and seed selection are complete"
-        )
-    config = load_config(args.config)
-    checkpoint_root = resolve_output_path(config["paths"]["checkpoint_dir"], "CHECKPOINT_DIR")
-    if args.checkpoint:
-        checkpoint_path = Path(args.checkpoint)
-    elif args.run_id:
-        architecture = str(config.get("model", {}).get("architecture", "transformer_moe"))
-        checkpoint_path = find_run_checkpoint(checkpoint_root / args.run_id, architecture)
-    else:
-        latest_path = checkpoint_root / "latest_run.json"
-        if not latest_path.exists():
-            raise FileNotFoundError("No latest run found. Train first or pass --checkpoint/--run-id.")
-        checkpoint_path = Path(json.loads(latest_path.read_text(encoding="utf-8"))["checkpoint"])
-    resolved_config_path = checkpoint_path.parent / "resolved_config.yaml"
-    if resolved_config_path.exists():
-        config = load_config(resolved_config_path)
-        print(f"Using run configuration: {resolved_config_path}")
+def evaluate_run(run_dir, finalist_path, *, tracker=TRACKER):
+    run_dir = Path(run_dir)
+    config = load_config(run_dir / "resolved_config.yaml")
+    manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    if "base_config" in (yaml.safe_load(Path(finalist_path).read_text(encoding="utf-8")) or {}):
+        raise ValueError("Finalist must be a self-contained resolved configuration")
+    finalist = load_config(finalist_path)
+    lock = finalist.get("finalization", {})
+    if manifest["status"] != "completed" or config.get("profile") != "full":
+        raise ValueError("Final evaluation requires a completed full run")
+    if (not lock.get("locked") or not lock.get("locked_at") or not lock.get("selection_reason")
+            or config["seed"] not in lock.get("seeds", [])
+            or config["experiment_id"] != finalist.get("experiment_id")
+            or config_fingerprint(config) != config_fingerprint(finalist)):
+        raise ValueError("Finalist must lock the exact configuration, experiment and seed set")
+    output = run_dir / "evaluation"
+    if (output / "test.json").exists():
+        raise FileExistsError("Test evaluation already recorded for this run")
+    set_seed(int(config["seed"]))
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    data_config = {**config["dataset"], **config["training"]}
-    data_config["tokenizer"] = config["model"].get(
-        "pretrained_model_name", data_config.get("tokenizer")
-    )
-    if config["model"].get("pretrained_model_revision") is not None:
-        data_config["tokenizer_revision"] = config["model"]["pretrained_model_revision"]
-    bundle = prepare_data(data_config)
-    model_config = {**config["model"], "pad_token_id": bundle.tokenizer.pad_token_id or 0}
-    model_config.setdefault("architecture", "transformer_moe")
-    model = build_model(model_config, bundle.tokenizer.vocab_size, bundle.num_labels).to(device)
-    model.load_state_dict(load_file(str(checkpoint_path), device=str(device)))
+    bundle = prepare_run_data(config, final=True)
+    saved_labels = json.loads((run_dir / "labels.json").read_text(encoding="utf-8"))
+    if saved_labels["label_names"] != bundle.label_names:
+        raise ValueError("Dataset label mapping differs from the training run")
+    saved_data = manifest.get("data_provenance")
+    if saved_data and bundle.provenance != saved_data:
+        raise ValueError("Dataset/tokenizer provenance differs from the training run")
+    hf_config = json.loads((run_dir / "hf_config.json").read_text(encoding="utf-8"))
+    model = build_model(config["model"], num_labels=bundle.num_labels, hf_config=hf_config).to(device)
+    summary = json.loads((run_dir / "summary.json").read_text(encoding="utf-8"))
+    checkpoint = run_dir / summary["checkpoint"]
+    if not checkpoint.resolve().is_relative_to(run_dir.resolve()):
+        raise ValueError("Checkpoint must be inside the selected run")
+    model.load_state_dict(load_file(str(checkpoint), device=str(device)))
     model.eval()
-    predictions = []
-    all_preds = []
-    all_labels = []
-    total_loss = 0.0
-    total_examples = 0
-    routing_counts = torch.zeros(getattr(model, "num_experts", 0), dtype=torch.long)
+    labels, predictions, probabilities = [], [], []
+    loss_sum = 0.0
     with torch.no_grad():
-        for batch in tqdm(bundle.loaders["test"], desc="Evaluating"):
-            labels = batch["labels"].to(device)
-            logits, aux = standardize_model_output(model(**model_inputs_from_batch(batch, device)))
-            predicted = logits.argmax(dim=-1)
-            total_loss += F.cross_entropy(logits, labels, reduction="sum").item()
-            total_examples += labels.numel()
-            if "top_indices" in aux and routing_counts.numel() > 0:
-                routing_counts += torch.bincount(aux["top_indices"].reshape(-1).cpu(), minlength=model.num_experts)
-            preds_cpu = predicted.cpu().tolist()
-            labels_cpu = labels.cpu().tolist()
-            all_preds.extend(preds_cpu)
-            all_labels.extend(labels_cpu)
-            predictions.extend({"prediction": int(p), "label": int(l)} for p, l in zip(preds_cpu, labels_cpu))
-    cls_metrics = compute_classification_metrics(all_labels, all_preds, label_names=bundle.label_names)
-    prediction_diagnostics = compute_prediction_diagnostics(
-        all_labels, all_preds, label_names=bundle.label_names
-    )
-    results = {
-        "loss": (total_loss / total_examples) if total_examples > 0 else 0.0,
-        "accuracy": cls_metrics["accuracy"],
-        "macro_f1": cls_metrics["macro_f1"],
-        "weighted_f1": cls_metrics["weighted_f1"],
-        "per_class_f1": cls_metrics["per_class_f1"],
-        "classification_report": cls_metrics["classification_report"],
-        "label_names": bundle.label_names,
-        "routing_counts": routing_counts.tolist(),
-        **prediction_diagnostics,
-        "predictions": predictions,
-    }
-    results_root = resolve_output_path(config["paths"]["results_dir"], "RESULTS_DIR")
-    run_id = checkpoint_path.parent.name
-    results_dir = results_root / run_id
-    results_dir.mkdir(parents=True, exist_ok=True)
-    output_path = results_dir / "vihsd_predictions.json"
-    output_path.write_text(json.dumps(results, indent=2), encoding="utf-8")
-    diagnostics_path = results_dir / "prediction_diagnostics.json"
-    diagnostics_path.write_text(
-        json.dumps(prediction_diagnostics, indent=2), encoding="utf-8"
-    )
-    confusion_csv_path = results_dir / "confusion_matrix.csv"
-    with confusion_csv_path.open("w", newline="", encoding="utf-8") as file:
-        writer = csv.writer(file)
-        writer.writerow(["actual\\predicted", *prediction_diagnostics["label_names"]])
-        writer.writerows(
-            zip(
-                prediction_diagnostics["label_names"],
-                prediction_diagnostics["confusion_matrix"],
-            )
-        )
-    print(f"Test loss: {results['loss']:.4f}")
-    print(f"Test accuracy: {results['accuracy']:.4f}")
-    print(f"Test macro F1: {results['macro_f1']:.4f}")
-    print(f"Test weighted F1: {results['weighted_f1']:.4f}")
-    print("Actual class distribution:", prediction_diagnostics["actual_class_distribution"])
-    print("Predicted class distribution:", prediction_diagnostics["predicted_class_distribution"])
-    print("Confusion matrix:")
-    for row in prediction_diagnostics["confusion_matrix"]:
-        print(row)
-    print("\nClassification Report:\n" + format_classification_report(all_labels, all_preds, label_names=bundle.label_names))
-    print(f"Run ID: {run_id}")
-    print(f"Saved predictions: {output_path}")
-    print(f"Saved diagnostics: {diagnostics_path}")
-    print(f"Saved confusion matrix: {confusion_csv_path}")
+        for batch in bundle.loaders["test"]:
+            actual = batch["labels"].to(device)
+            logits, _ = model(**model_inputs_from_batch(batch, device))
+            loss_sum += float(torch.nn.functional.cross_entropy(logits, actual, reduction="sum"))
+            labels.extend(actual.cpu().tolist())
+            predictions.extend(logits.argmax(-1).cpu().tolist())
+            probabilities.extend(logits.softmax(-1).cpu().tolist())
+    metrics = compute_classification_metrics(labels, predictions, bundle.label_names)
+    diagnostics = compute_prediction_diagnostics(labels, predictions, bundle.label_names)
+    result = {"split": "test", "checkpoint": summary["checkpoint"], "evaluated_at": now(),
+              "finalist_path": str(finalist_path), "seed_set": lock["seeds"],
+              "loss": loss_sum / len(labels), **metrics, **diagnostics}
+    output.mkdir(exist_ok=True)
+    write_json(output / "test.json", result)
+    write_json(output / "predictions.json", {"split": "test", "checkpoint": summary["checkpoint"],
+               "label_names": bundle.label_names, "predictions": [
+                   {"label": y, "prediction": p, "probabilities": probs}
+                   for y, p, probs in zip(labels, predictions, probabilities)]})
+    with (output / "confusion_matrix.csv").open("w", newline="", encoding="utf-8") as stream:
+        writer = csv.writer(stream)
+        writer.writerow(["actual/predicted", *bundle.label_names])
+        writer.writerows(zip(bundle.label_names, diagnostics["confusion_matrix"]))
+    update_tracker(manifest["run_id"], {f"test_{k}": v for k, v in metrics.items()}, tracker=tracker)
+    if manifest.get("wandb_path") and config.get("logging", {}).get("mode") != "offline":
+        try:
+            import wandb
+            remote = wandb.Api().run(manifest["wandb_path"])
+            remote.summary.update({f"test/{k}": metrics[k] for k in ("macro_f1", "accuracy", "weighted_f1")})
+        except Exception as error:
+            manifest["wandb_sync"] = "pending"
+            manifest["test_sync_error"] = str(error)
+            write_json(run_dir / "manifest.json", manifest)
+            update_tracker(manifest["run_id"], {"wandb_sync": "pending"}, tracker=tracker)
+            print("Test metrics saved locally; W&B test summary update is pending")
+    return result
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Evaluate a completed run with a locked finalist configuration.")
+    parser.add_argument("--run-dir", required=True)
+    parser.add_argument("--finalist-config", required=True)
+    parser.add_argument("--final-evaluation", action="store_true")
+    args = parser.parse_args(argv)
+    if not args.final_evaluation:
+        parser.error("Test is reserved for locked finalists; --final-evaluation is required")
+    result = evaluate_run(args.run_dir, args.finalist_config)
+    print(f"Test macro F1: {result['macro_f1']:.6f}")
 
 
 if __name__ == "__main__":

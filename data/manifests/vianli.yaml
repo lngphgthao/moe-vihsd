@@ -1,9 +1,9 @@
 dataset: ViANLI
 source:
   name: uitnlp/ViANLI
-  type: huggingface_hub
   revision: 0fec8d6ecb043a61c609f9b51f80401fdf1e84d3
-  access: "Loaded by src/data/loader.py when no local DatasetDict is available."
+  revision_evidence: Historical cache metadata; not a verified recipe for every segmented
+    file
 splits:
   train: 8012
   validation: 1000
@@ -13,13 +13,33 @@ schema:
   premise_column: premise
   hypothesis_column: hypothesis
   label_column: label
-  labels: [entailment, contradiction, neutral]
+  labels:
+  - entailment
+  - contradiction
+  - neutral
 preprocessing:
   tokenizer: xlm-roberta-base
   tokenizer_revision: e73636d4f797dec63c3081bb6ed5c7b0bb3f2089
   max_length: 256
-  segmentation: "Native pair tokenization for the XLM-R path; PhoBERT segmentation is produced separately by scripts/segment_vianli.py."
+  segmentation: VnCoreNLP; original tool/model revision unknown for historical local
+    copy
 verification:
-  expected_split_sizes_checked_by: src/data/loader.py
-  checksum: null
-  notes: "Revision and split sizes are pinned by the NLIMoE experiment overlays."
+  notes: Byte checksums verified during move; segmentation tool/model versions of
+    historical copies remain unknown. Hub recreation pins source revision, but byte-identical
+    regeneration is not claimed.
+local_path: data/processed/vianli_segmented
+migration:
+  date: '2026-11-22'
+  file_count: 10
+  files_sha256:
+    dataset_dict.json: 1239dbd4ca38311b03319b672c05a6fdaacc884b0034eed047659406c62eedd4
+    test/data-00000-of-00001.arrow: 7450ecdd5da15f097ae97405a5fcc035ea516f0394947fae89d5671ffd2c7769
+    test/dataset_info.json: be522d798890db8c97ddb4c5bf7c9057789d3df384fe4c9901379d9f583a3fb3
+    test/state.json: 18a455db513d4401cc53302472b6dbeb4e81fb2566f555ef3b84c4489a8d7dba
+    train/data-00000-of-00001.arrow: 982b4ef1502d1db49eb6001b6816bb7221fc835506324529676150c589442922
+    train/dataset_info.json: be522d798890db8c97ddb4c5bf7c9057789d3df384fe4c9901379d9f583a3fb3
+    train/state.json: 295dd9276e05ce285bfccb304d2e13580fcb65cc5c371152221bff933e6b2640
+    validation/data-00000-of-00001.arrow: 4a36122f75757b84780f04e2d58ed94adabc9db2f4cefb152276b69163a90d13
+    validation/dataset_info.json: be522d798890db8c97ddb4c5bf7c9057789d3df384fe4c9901379d9f583a3fb3
+    validation/state.json: 8593d9cb4af3d3a96d76d260c84fbfc228ed19cd7ca8ca11569b9517ebe16c7e
+  verified: true

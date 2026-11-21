@@ -1,24 +1,53 @@
 dataset: ViHSD
 source:
-  name: "Local segmented DatasetDict configured as data/vihsd_segmented"
-  type: local_preprocessed
-  revision: null
-  access: "Create or restore the segmented DatasetDict outside Git before training."
+  name: uitnlp/vihsd
+  revision: 88e81b36ca376867640dad9df295e0f7d499ab80
+  revision_evidence: Historical cache metadata; not a verified recipe for every segmented
+    file
 splits:
-  train: null
-  validation: null
-  test: null
+  train: 24048
+  validation: 2672
+  test: 6680
 schema:
   input_mode: single
   text_column: free_text
   label_column: label_id
-  labels: null
+  labels:
+  - CLEAN
+  - OFFENSIVE
+  - HATE
 preprocessing:
   tokenizer: vinai/phobert-base
   tokenizer_revision: null
   max_length: 128
-  segmentation: "Prepared segmented text; the source revision and checksum were not recorded in the historical artifact."
+  segmentation: VnCoreNLP; original tool/model revision unknown for historical local
+    copy
 verification:
-  expected_split_sizes_checked_by: src/data/loader.py
-  checksum: null
-  notes: "Populate source revision, split sizes, and checksum when the external dataset artifact is revalidated."
+  notes: Byte checksums verified during move; segmentation tool/model versions of
+    historical copies remain unknown. Hub recreation pins source revision, but byte-identical
+    regeneration is not claimed.
+local_path: data/processed/vihsd_segmented
+migration:
+  date: '2026-11-22'
+  file_count: 19
+  files_sha256:
+    dataset_dict.json: 1239dbd4ca38311b03319b672c05a6fdaacc884b0034eed047659406c62eedd4
+    test/cache-9db5bd5c86d4790c.arrow: 55efe3dedf26cb6afb10f7ea370932f6cab99f0e2eb5d8a577be7fdb16241029
+    test/cache-eceb32825205d2d2_00000_of_00002.arrow: 23b9cb6edf8eda3bef1756d5861a0f8b7549a6e7f83ae8968c8700928c6fbc13
+    test/cache-eceb32825205d2d2_00001_of_00002.arrow: 1468980d36919619c6265ed9430fefad8cfe4130dd90e3b445bd68b46e77eb0e
+    test/data-00000-of-00001.arrow: 44434c4ab7304338a402eda5bdbbf84aa08cd995c0f28dacbda19a5ef26fa4d7
+    test/dataset_info.json: ecc8b9153c3220d69be0341887f65baed4af4f7d9745a2676f8eb196597ba5e0
+    test/state.json: 4b936bd4805761df6769f2631cabe37c2b9fdb48179df3092795d625714b8fd7
+    train/cache-20d97028795a8f52_00000_of_00002.arrow: 63cf17fe7386f0506e8ac5f1e1f91ae5c6691369300fa4127fced6b48eaef6c7
+    train/cache-20d97028795a8f52_00001_of_00002.arrow: 0c99b71252bfde2b70ac1241a8871682a937271bbd9b4937acb57d0839a3d16e
+    train/cache-d0f77b9378175334.arrow: d0ba73bbb1c2cf2604689d57bf3c0dcacbe6af414f4d0aa74814f4af7d4224bb
+    train/data-00000-of-00001.arrow: b8ae67ba4735461b30767f5780ed451f922c493233a33ede03409521e86c6920
+    train/dataset_info.json: ecc8b9153c3220d69be0341887f65baed4af4f7d9745a2676f8eb196597ba5e0
+    train/state.json: 9088573265fad941da511ccd33c66bb77457b800e5d1ade3fed32bac40c7c29c
+    validation/cache-26603225a76522aa.arrow: 55214047e1860da82b7569890dc1ed15094503f42536d23016c3701ceaa67ba6
+    validation/cache-4b01bb66d9b63683_00000_of_00002.arrow: 1757c2c19122139f141f01a7e7b26fee56526379613d0ff13e740a22cb29722c
+    validation/cache-4b01bb66d9b63683_00001_of_00002.arrow: 8f1649d1c5f27849eac211e14399024870971bec5d89c0e8b69761341efb0fa8
+    validation/data-00000-of-00001.arrow: fc189d8396ac8b76dd6ff35e7ff0fe321bd275d5156ac50b3a2f4203f28a68b2
+    validation/dataset_info.json: ecc8b9153c3220d69be0341887f65baed4af4f7d9745a2676f8eb196597ba5e0
+    validation/state.json: 78d625f812e593b236a5a6e6802bac76df66799198d94f36d7dcf32e9afea84f
+  verified: true
