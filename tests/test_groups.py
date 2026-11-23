@@ -48,6 +48,7 @@ class TestGroups(unittest.TestCase):
     def test_group_paths_and_seeds_are_explicit_and_reserved(self):
         with tempfile.TemporaryDirectory() as directory:
             tracker = Path(directory) / "tracker.csv"
+            run_root = Path(directory) / "runs"
             calls = []
             def train(argv):
                 rows = list(csv.DictReader(tracker.read_text(encoding="utf-8").splitlines()))
@@ -60,10 +61,11 @@ class TestGroups(unittest.TestCase):
                 entry["config"] = str((ROOT / "configs/groups" / entry["config"]).resolve())
             group_path = Path(directory) / "tracked_group.yaml"
             group_path.write_text(yaml.safe_dump(group), encoding="utf-8")
-            with patch("train.main", side_effect=train):
-                run_group(group_path, True, tracker=tracker)
-            self.assertEqual(len(calls), 2)
-            self.assertIn("--smoke-test", calls[0])
-            self.assertIn("seed=42", calls[0])
-            cfg = load_config(ROOT / "configs/experiments/vianli/exp-003.yaml")
-            self.assertEqual(reserve_run(cfg, tracker=tracker), "run-005")
+            with patch.dict(os.environ, {"RUNS_DIR": str(run_root)}):
+                with patch("train.main", side_effect=train):
+                    run_group(group_path, True, tracker=tracker)
+                self.assertEqual(len(calls), 2)
+                self.assertIn("--smoke-test", calls[0])
+                self.assertIn("seed=42", calls[0])
+                cfg = load_config(ROOT / "configs/experiments/vianli/exp-003.yaml")
+                self.assertEqual(reserve_run(cfg, tracker=tracker), "run-005")

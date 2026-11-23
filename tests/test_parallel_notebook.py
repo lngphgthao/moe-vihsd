@@ -5,7 +5,6 @@ from datetime import datetime
 import json
 import math
 from pathlib import Path
-import subprocess
 import sys
 import tempfile
 from types import SimpleNamespace
@@ -16,6 +15,10 @@ from src.utils import load_config
 
 ROOT = Path(__file__).resolve().parents[1]
 NOTEBOOK = ROOT / 'notebooks/parallel_kaggle_smoke.ipynb'
+MAIN_NOTEBOOKS = [
+    ROOT / 'notebooks/main_kaggle.ipynb',
+    ROOT / 'notebooks/main_colab.ipynb',
+]
 
 
 def notebook_functions():
@@ -29,6 +32,14 @@ def notebook_functions():
 
 
 class TestParallelNotebook(unittest.TestCase):
+    def test_main_notebooks_leave_offline_suite_to_ci(self):
+        for notebook in MAIN_NOTEBOOKS:
+            data = json.loads(notebook.read_text(encoding='utf-8'))
+            source = '\n'.join(
+                ''.join(cell['source']) for cell in data['cells']
+            )
+            self.assertNotIn('unittest discover', source)
+            self.assertIn('GitHub Actions', source)
     def fixtures(self, directory):
         folder = Path(directory)
         jobs = [dict(gpu='0', run_id='run-030', config='a.yaml', experiment_id='exp-003', backbone='offline-a'),
@@ -61,9 +72,15 @@ class TestParallelNotebook(unittest.TestCase):
                 compile(''.join(cell['source']), str(NOTEBOOK), 'exec')
                 self.assertIsNone(cell['execution_count'])
                 self.assertEqual(cell['outputs'], [])
-        setup_source = '\n'.join(NOTEBOOK.read_text(encoding='utf-8').splitlines())
+        setup_source = '\n'.join(
+            ''.join(cell['source']) for cell in data['cells']
+        )
         self.assertIn('HF_HUB_DISABLE_XET', setup_source)
         self.assertIn('test_console_stream.py', setup_source)
+        self.assertNotIn('subprocess', setup_source)
+        self.assertNotIn('Popen', setup_source)
+        self.assertIn('get_ipython().system(command + " &")', setup_source)
+        self.assertIn('.exit', setup_source)
         for name in ['vianli_xlmr_parallel_smoke.yaml', 'vianli_mdeberta_parallel_smoke.yaml']:
             config = load_config(ROOT / 'configs/diagnostics' / name)
             self.assertTrue(config['logging']['use_tracker'])
@@ -104,34 +121,3 @@ class TestParallelNotebook(unittest.TestCase):
             self.assertFalse(report['passed'])
             self.assertIn('summary.json', report['runs']['run-031']['missing'])
 
-    def test_launcher_assigns_two_gpus_same_checkout_and_unique_ids(self):
-        with tempfile.TemporaryDirectory() as directory:
-            calls = []
-            def spawn(args, **kwargs):
-                calls.append((args, kwargs))
-                return SimpleNamespace(pid=100 + len(calls))
-            namespace = dict(Path=Path, sys=sys, subprocess=SimpleNamespace(Popen=spawn, STDOUT=subprocess.STDOUT),
-                             COMMON_ENV={'RUNS_DIR': 'same-root'}, LOG_ROOT=Path(directory), REPO_DIR=ROOT, USE_WANDB=True)
-            exec(notebook_functions(), namespace)
-            jobs = [dict(gpu='0', run_id='run-030', config='a.yaml'), dict(gpu='1', run_id='run-031', config='b.yaml')]
-            processes = namespace['launch_jobs'](jobs)
-            self.assertEqual(set(processes), {'run-030', 'run-031'})
-            self.assertEqual([kwargs['env']['CUDA_VISIBLE_DEVICES'] for _, kwargs in calls], ['0', '1'])
-            for (args, kwargs), job in zip(calls, jobs):
-                self.assertEqual(kwargs['cwd'], ROOT)
-                self.assertEqual(args[args.index('--run-id') + 1], job['run_id'])
-                self.assertIn('logging.use_tracker=true', args)
-                self.assertIn('logging.use_wandb=true', args)
-
-    def test_partial_launch_failure_stops_only_started_worker(self):
-        with tempfile.TemporaryDirectory() as directory:
-            process = Mock(pid=100)
-            process.poll.return_value = None
-            process.wait.return_value = 0
-            spawn = Mock(side_effect=[process, RuntimeError('cannot spawn second worker')])
-            namespace = dict(Path=Path, sys=sys, subprocess=SimpleNamespace(Popen=spawn, STDOUT=subprocess.STDOUT, TimeoutExpired=subprocess.TimeoutExpired),
-                             COMMON_ENV={}, LOG_ROOT=Path(directory), REPO_DIR=ROOT, USE_WANDB=False)
-            exec(notebook_functions(), namespace)
-            with self.assertRaisesRegex(RuntimeError, 'cannot spawn'):
-                namespace['launch_jobs']([dict(gpu='0', run_id='run-030', config='a.yaml'), dict(gpu='1', run_id='run-031', config='b.yaml')])
-            process.terminate.assert_called_once()
