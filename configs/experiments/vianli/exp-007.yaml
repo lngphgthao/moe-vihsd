@@ -1,0 +1,11 @@
+# Multilingual screening: native head, seed 42; paired with exp-003.
+base_config: ../../base/vianli.yaml
+experiment_id: exp-007
+dataset:
+  tokenizer_revision: a0484667b22365f84929a935b5e50a51f71f159d
+model:
+  backbone: microsoft/mdeberta-v3-base
+  revision: a0484667b22365f84929a935b5e50a51f71f159d
+  freeze_backbone: false
+  head:
+    type: original

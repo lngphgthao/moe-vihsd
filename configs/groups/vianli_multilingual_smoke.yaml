@@ -1,0 +1,10 @@
+runs:
+- run_id: run-010
+  config: ../experiments/vianli/exp-003.yaml
+  seed: 42
+- run_id: run-011
+  config: ../experiments/vianli/exp-007.yaml
+  seed: 42
+overrides:
+  logging.use_wandb: false
+  training.smoke_test: true

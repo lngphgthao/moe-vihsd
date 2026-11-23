@@ -51,3 +51,14 @@ migration:
     validation/dataset_info.json: ecc8b9153c3220d69be0341887f65baed4af4f7d9745a2676f8eb196597ba5e0
     validation/state.json: 78d625f812e593b236a5a6e6802bac76df66799198d94f36d7dcf32e9afea84f
   verified: true
+
+# Raw source used by multilingual screening; independent of the segmented local artifact.
+multilingual_screening:
+  experiments: [exp-008, exp-009]
+  source: uitnlp/vihsd
+  revision: 88e81b36ca376867640dad9df295e0f7d499ab80
+  input: raw free_text
+  word_segmentation: false
+  access: Accept the dataset conditions on Hugging Face and use HF_TOKEN from that account.
+  checksum: null
+  verification: Raw Hub download not performed in this config setup; split sizes are checked at runtime.

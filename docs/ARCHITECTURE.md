@@ -156,3 +156,33 @@ Transformers 5.5.0, datasets 5.0.1, VnCoreNLP wrapper 1.0.3:
 Chưa chạy notebook trên cloud, VnCoreNLP Java service, smoke GPU, full experiment hay
 W&B online. Các test dùng dữ liệu tổng hợp; không phải kết quả luận văn. Recipe
 segmentation lịch sử và revision PhoBERT/tokenizer chưa xác minh vẫn ghi giới hạn.
+
+
+## Bổ sung screening multilingual backbone — 2026-11-23
+
+exp-003/007 và exp-008/009 so sánh original head XLM-R/mDeBERTa trên ViANLI/ViHSD.
+Các group multilingual_smoke và multilingual_screening dùng ID riêng cho từng session;
+không thêm contract mới vào group runner, trainer hoặc model factory. mDeBERTa sử dụng
+model_type deberta-v2 qua AutoModelForSequenceClassification và giữ native head.
+
+Pin revision tokenizer độc lập cho từng model, vì base ViANLI đang pin tokenizer XLM-R.
+ViHSD override cả dataset.name/revision sang Hub text gốc, tránh dùng segmentation
+PhoBERT từ base. Chỉ bổ sung SentencePiece/Protobuf vào dependency cho tokenizer SPM.
+Kiểm chứng CPU/tokenizer của đợt setup được ghi bên dưới; chưa có smoke GPU.
+
+
+Kiểm chứng setup ngày 2026-11-23 trên CPU, Transformers 5.5.0:
+
+- Toàn bộ 31 test offline đạt, gồm hai test config/group mới và subtest DeBERTa-v2
+  native head: logits parity, backward với segment IDs, save/load từ HF config.
+- Tokenizer mDeBERTa thật tại revision a0484667b22365f84929a935b5e50a51f71f159d
+  đã tải và encode text đơn/cặp NLI có padding; keys gồm input_ids, attention_mask,
+  token_type_ids. Không tải pretrained model weights. Vocabulary tokenizer 250101
+  nhỏ hơn embedding vocabulary 251000 là hợp lệ; tất cả token ID kiểm tra nằm trong
+  giới hạn embedding. Không resize embedding theo kích thước tokenizer.
+- SentencePiece 0.2.3 và Protobuf 7.36.1 có trong môi trường kiểm tra; pip check
+  không phát hiện dependency xung đột. Compileall và diff check đạt.
+- Log và metadata tokenizer ở runs/backbone_setup_verification/, ngoài Git.
+- Chưa tải ViHSD raw có kiểm soát truy cập trong tác vụ này; source revision đối chiếu
+  từ download metadata lịch sử. Runtime sẽ kiểm tra schema/split sizes. Chưa kiểm tra
+  tải weights thật, chạy GPU, W&B online hoặc đánh giá test/finalist.

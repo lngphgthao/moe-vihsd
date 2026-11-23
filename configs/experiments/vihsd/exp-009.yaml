@@ -1,0 +1,8 @@
+# Keep raw ViHSD and the same training budget as exp-008.
+base_config: exp-008.yaml
+experiment_id: exp-009
+dataset:
+  tokenizer_revision: a0484667b22365f84929a935b5e50a51f71f159d
+model:
+  backbone: microsoft/mdeberta-v3-base
+  revision: a0484667b22365f84929a935b5e50a51f71f159d

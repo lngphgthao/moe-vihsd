@@ -51,7 +51,7 @@ routing:
   balance_loss_coef: 0.01
 logging:
   use_wandb: true
-  project: thesis-classifier-heads
+  project: classifier-moe
   mode: online
 diagnostics:
   collect_model_diagnostics: false

@@ -9,7 +9,8 @@ import torch
 from safetensors.torch import load_file, save_file
 from transformers import (BertConfig, BertModel, BertForSequenceClassification,
                           RobertaConfig, RobertaModel, RobertaForSequenceClassification,
-                          XLMRobertaConfig, XLMRobertaModel, XLMRobertaForSequenceClassification)
+                          XLMRobertaConfig, XLMRobertaModel, XLMRobertaForSequenceClassification,
+                          DebertaV2Config, DebertaV2ForSequenceClassification)
 
 from src.models.factory import build_model
 
@@ -18,11 +19,21 @@ class TestHeads(unittest.TestCase):
     def test_original_matches_native_head_and_checkpoint(self):
         for config_cls, model_cls in [(BertConfig, BertForSequenceClassification),
                                       (RobertaConfig, RobertaForSequenceClassification),
-                                      (XLMRobertaConfig, XLMRobertaForSequenceClassification)]:
+                                      (XLMRobertaConfig, XLMRobertaForSequenceClassification),
+                                      (DebertaV2Config, DebertaV2ForSequenceClassification)]:
             with self.subTest(backbone=config_cls.__name__):
                 cfg = config_cls(vocab_size=30, hidden_size=8, intermediate_size=12,
                                  num_hidden_layers=1, num_attention_heads=2, num_labels=3,
                                  pad_token_id=0, max_position_embeddings=32)
+                if config_cls is DebertaV2Config:
+                    cfg.relative_attention = True
+                    cfg.position_buckets = 8
+                    cfg.max_relative_positions = 32
+                    cfg.pos_att_type = ["p2c", "c2p"]
+                    cfg.share_att_key = True
+                    cfg.position_biased_input = False
+                    cfg.norm_rel_ebd = "layer_norm"
+                    cfg.type_vocab_size = 0
                 native = model_cls(cfg).eval()
                 config = {"backbone": "offline", "revision": None, "head": {"type": "original"}}
                 with patch("src.models.heads.original.AutoModelForSequenceClassification.from_pretrained",
@@ -30,7 +41,7 @@ class TestHeads(unittest.TestCase):
                     model = build_model(config, num_labels=3).eval()
                 inputs = {"input_ids": torch.tensor([[2, 3, 4, 0], [2, 5, 0, 0]]),
                           "attention_mask": torch.tensor([[1, 1, 1, 0], [1, 1, 0, 0]])}
-                if config_cls is BertConfig:
+                if config_cls in (BertConfig, DebertaV2Config):
                     inputs["token_type_ids"] = torch.tensor([[0, 0, 1, 0], [0, 1, 0, 0]])
                 logits, aux = model(**inputs)
                 torch.testing.assert_close(logits, native(**inputs).logits)
@@ -40,8 +51,9 @@ class TestHeads(unittest.TestCase):
                 with tempfile.TemporaryDirectory() as tmp:
                     checkpoint = str(Path(tmp) / "best.safetensors")
                     save_file(model.state_dict(), checkpoint)
-                    model.load_state_dict(load_file(checkpoint))
-                    torch.testing.assert_close(model(**inputs)[0], logits)
+                    restored = build_model(config, num_labels=3, hf_config=native.config.to_dict()).eval()
+                    restored.load_state_dict(load_file(checkpoint))
+                    torch.testing.assert_close(restored(**inputs)[0], logits)
 
     def test_moe_masked_pooling_backward_and_frozen_encoder(self):
         for config_cls, encoder_cls in [(BertConfig, BertModel), (RobertaConfig, RobertaModel),

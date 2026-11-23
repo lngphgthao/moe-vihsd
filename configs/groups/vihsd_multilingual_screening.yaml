@@ -1,0 +1,7 @@
+runs:
+- run_id: run-008
+  config: ../experiments/vihsd/exp-008.yaml
+  seed: 42
+- run_id: run-009
+  config: ../experiments/vihsd/exp-009.yaml
+  seed: 42

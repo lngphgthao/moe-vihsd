@@ -1,9 +1,13 @@
 # Phạm vi luận văn hiện hành
 
-Cập nhật 2026-11-22. Nghiên cứu áp dụng Mixture of Experts cho phân lớp văn bản tiếng Việt,
+Cập nhật phạm vi triển khai 2026-11-23. Nghiên cứu áp dụng Mixture of Experts cho phân lớp văn bản tiếng Việt,
 với MoE tại classifier/head trên encoder dense. ViANLI (premise/hypothesis) và ViHSD
 (single text) là điểm xuất phát. XLM-R, PhoBERT và mBERT là backbone có thể khảo sát;
 config chạy cụ thể cần lý do lựa chọn và ngân sách.
+
+Ưu tiên hiện hành (D010): screening XLM-R-base và mDeBERTa-v3-base với original
+head trên cả hai dataset. Hướng dài hạn là kiểm tra cải thiện MoE qua nhiều ngôn ngữ;
+chưa thêm ngôn ngữ mới và dữ liệu hiện tại chưa đủ để xác nhận khả năng đó.
 
 ## Câu hỏi nghiên cứu
 

@@ -1,0 +1,13 @@
+# Use original text from the gated Hub dataset, not PhoBERT-segmented text.
+base_config: ../../base/vihsd.yaml
+experiment_id: exp-008
+dataset:
+  name: uitnlp/vihsd
+  revision: 88e81b36ca376867640dad9df295e0f7d499ab80
+  tokenizer_revision: e73636d4f797dec63c3081bb6ed5c7b0bb3f2089
+model:
+  backbone: xlm-roberta-base
+  revision: e73636d4f797dec63c3081bb6ed5c7b0bb3f2089
+  freeze_backbone: false
+  head:
+    type: original
