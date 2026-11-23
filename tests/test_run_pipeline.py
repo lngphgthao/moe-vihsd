@@ -2,6 +2,7 @@
 import copy
 import csv
 import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 import tempfile
@@ -35,6 +36,14 @@ def tiny_bundle():
 
 
 class TestRunPipeline(unittest.TestCase):
+    def setUp(self):
+        self.run_dir_patcher = patch.dict(os.environ)
+        self.run_dir_patcher.start()
+        os.environ.pop("RUNS_DIR", None)
+
+    def tearDown(self):
+        self.run_dir_patcher.stop()
+
     def config(self, directory, kind):
         cfg = load_config(ROOT / f"configs/experiments/vianli/exp-{'003' if kind == 'original' else '004'}.yaml")
         cfg["model"]["backbone"] = "offline"

@@ -45,6 +45,8 @@ class TestMultilingualScreening(unittest.TestCase):
                     self.assertFalse(group['overrides']['logging.use_wandb'])
                     self.assertTrue(group['overrides']['training.smoke_test'])
                 for entry in group['runs']:
+                    if entry['run_id'] == 'auto':
+                        continue
                     self.assertNotIn(entry['run_id'], ids)
                     ids.add(entry['run_id'])
                     config = load_config(ROOT / 'configs/groups' / entry['config'])

@@ -1,6 +1,7 @@
 """Chạy group experiment; CSV tracker chỉ dùng khi bật rõ ràng."""
 import argparse
 import os
+import re
 from pathlib import Path
 import sys
 import yaml
@@ -38,7 +39,19 @@ def run_group(group_path, smoke_test=None, *, tracker=TRACKER):
     reserved = []
     for config, path, requested_run_id, overrides in planned:
         csv_tracker = tracker if config.get("logging", {}).get("use_tracker", True) else None
-        run_id = reserve_run(config, requested_run_id, tracker=csv_tracker)
+        if csv_tracker is None and requested_run_id in (None, "auto"):
+            run_root = Path(os.getenv("RUNS_DIR", config.get("paths", {}).get("runs_dir", "runs")))
+            used = [2]
+            if run_root.exists():
+                used.extend(int(path.name[4:]) for path in run_root.iterdir()
+                            if re.fullmatch(r"run-\d+", path.name))
+            candidate = max(used) + 1
+            while (run_root / f"run-{candidate:03d}").exists():
+                candidate += 1
+            allocation = f"run-{candidate:03d}"
+        else:
+            allocation = requested_run_id
+        run_id = reserve_run(config, allocation, tracker=csv_tracker)
         reserved.append((config, path, run_id, overrides, requested_run_id))
     collisions = []
     for config, _, run_id, _, requested_run_id in reserved:

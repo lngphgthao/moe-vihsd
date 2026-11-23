@@ -59,6 +59,6 @@ class TestTrackerDisabled(unittest.TestCase):
     def test_no_tracker_requires_explicit_safe_run_id(self):
         config = load_config(ROOT / 'configs/experiments/vianli/exp-003.yaml')
         self.assertEqual(reserve_run(config, 'run-030', tracker=None), 'run-030')
-        for run_id in [None, '../outside', 'run-001']:
+        for run_id in [None, 'auto', '../outside', 'run-001']:
             with self.subTest(run_id=run_id), self.assertRaises(ValueError):
                 reserve_run(config, run_id, tracker=None)
