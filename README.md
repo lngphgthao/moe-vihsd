@@ -40,20 +40,21 @@ Script từ chối ghi đè dataset đã tồn tại. Máy hiện tại đã gi�
 ## Chạy
 
 ```bash
-python train.py --config configs/experiments/vianli/exp-003.yaml --smoke-test
-python train.py --config configs/experiments/vianli/exp-004.yaml --no-smoke-test
+python train.py --config configs/experiments/vianli/exp-003.yaml --run-id run-010 --smoke-test
+python train.py --config configs/experiments/vianli/exp-004.yaml --run-id run-004 --no-smoke-test
 python scripts/run_group.py --group-config configs/groups/vianli_screening.yaml --no-smoke-test
 python scripts/aggregate_results.py --runs-dir runs --output-dir runs/analysis
 ```
 
-CLI cấp ID kế tiếp nếu không truyền `--run-id`; group dùng ID đã đăng ký rõ ràng.
-Run ID dùng một lần, retry cấp ID mới. Điều phối bằng tracker chung trước khi phân
-phối nhiều máy. Screening dùng seed 42; seed cuối chưa khóa.
+Tracker CSV đã bật lại: `logging.use_tracker: true` là mặc định. Train có thể cấp
+ID tiếp theo từ CSV, hoặc dùng --run-id; group có ID cụ thể. Run ID dùng một lần,
+retry cấp ID mới; kiểm tra trùng trên W&B/ổ lưu trữ khi phân phối nhiều máy.
+Screening dùng seed 42; seed cuối chưa khóa.
 `--set training.head_learning_rate=0.0001` và các override khác chỉ nhận key có trong
 resolved config. Đổi cấu hình nghiên cứu đã chạy cần experiment ID mới.
 
 `runs/<run_id>/` giữ manifest, config, labels, native HF config, metrics JSONL, summary,
-console, checkpoint và diagnostics. W&B và tracker cùng liên kết run ID. Đặt `RUNS_DIR`
+console, checkpoint và diagnostics. W&B và artifact local cùng liên kết run ID. Đặt `RUNS_DIR`
 để lưu ra ổ khác; khi W&B lỗi, local logging vẫn tiếp tục và `wandb_sync=pending`.
 Các score dùng thang 0–1; thiếu metric giữ trống.
 
@@ -66,6 +67,30 @@ python evaluate.py --run-dir runs/<run_id> --finalist-config configs/finalists/<
 
 Evaluator kiểm tra config/seed/provenance, dựng model từ HF config đã lưu và nạp checkpoint;
 không tìm “latest run” và không dùng config nền hiện tại để dựng lại model.
+
+## Notebook kiểm tra hai run song song trên Kaggle T4 ×2
+
+Mở [parallel_kaggle_smoke.ipynb](notebooks/parallel_kaggle_smoke.ipynb). Đây là notebook
+riêng để xác nhận hai process chia sẻ một checkout/cache/tracker nhưng dùng hai GPU,
+model/optimizer và artifact riêng. Bật T4 x2, Internet và secrets HF_TOKEN/WANDB_API_KEY;
+push/upload code mới trước khi chạy.
+
+1. Setup repo/dependency, secrets và kiểm tra hai GPU.
+2. Chạy test tracker offline, đăng ký run-014/015 rồi làm ấm cache model/dataset.
+3. Launch XLM-R (exp-003) trên GPU 0, mDeBERTa (exp-007) trên GPU 1. Cả hai là
+   diagnostic original-head, 2 epoch, 256 train/64 validation, batch 8, seed 42.
+4. Xem GPU memory/utilization và log mỗi 10 giây; chờ cả hai kết thúc.
+5. Cell xác nhận kiểm tra status, GPU mask, thời gian training chồng nhau, checkpoint,
+   metric hữu hạn, hai dòng CSV đúng metadata và W&B sync nếu bật. Lưu output; ZIP tùy chọn.
+
+PASS chỉ được xác nhận khi chạy notebook thực tế. Notebook không đánh giá test set.
+Nếu run-014/015 đã dùng, đổi sang ID mới; không reset trạng thái để ghi đè. Nếu chưa có
+training overlap thì chưa xác nhận chạy song song, kể cả khi hai run hoàn tất riêng lẻ.
+
+CSV dùng OS-backed FileLock có chờ tối đa 30 giây; file .lock có thể còn sau khi nhả khóa,
+không xóa nó trong khi worker đang chạy. Lock này dùng cho cùng filesystem, không phải
+đồng bộ giữa hai session Kaggle độc lập. Group runner thường vẫn chạy tuần tự.
+Có thể tắt CSV bằng logging.use_tracker=false khi thật sự không cần, vẫn giữ W&B/artifact.
 
 ## Screening XLM-R và mDeBERTa trên hai session Kaggle
 
@@ -113,8 +138,8 @@ python train.py --config configs/experiments/vianli/exp-007.yaml --run-id run-00
 ```
 
 Sau khi chạy, xem `summary.json`, `metrics.jsonl`, `manifest.json`, `console.log`.
-Tải toàn bộ run directories và `experiments/experiment_tracker.csv` của **cả hai session**;
-đối chiếu/gộp từng dòng theo run_id, không thay toàn tracker bằng bản từ một session.
+Tải toàn bộ run directories và tracker CSV của **cả hai session**, giữ W&B URL.
+Đối chiếu/gộp từng dòng theo run_id, không ghi đè toàn CSV bằng bản từ một session.
 Không chạy evaluate test hoặc khóa finalist ở bước screening. Nếu smoke OOM, cần
 điều chỉnh protocol/budget của cặp so sánh trước full, không tự hạ batch riêng một model.
 

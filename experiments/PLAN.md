@@ -1,5 +1,17 @@
 # Kế hoạch thực nghiệm hiện hành
 
+## Theo dõi run và kiểm tra parallel — cập nhật 2026-11-23
+
+Theo D012, người dùng yêu cầu bật lại CSV và dùng notebook xác nhận hai run đồng thời.
+W&B, tracker và local artifact cùng liên kết run_id. Base config mặc định
+logging.use_tracker=true; CSV dùng lock OS có chờ trên cùng filesystem.
+
+Notebook notebooks/parallel_kaggle_smoke.ipynb thử run-014 (exp-003/XLM-R) và run-015
+(exp-007/mDeBERTa), original head trên ViANLI, 2 epoch, 256 train/64 validation,
+batch 8, seed 42. Đây là diagnostic chưa chạy trên GPU; không nhập score vào bảng
+screening full. Cell cuối phải xác nhận GPU mask 0/1, hai training window chồng nhau,
+CSV/manifest/summary nhất quán và W&B đồng bộ nếu bật. Không gọi evaluate test.
+
 ## Ưu tiên hiện hành — screening multilingual backbone, 2026-11-23
 
 Mục tiêu dài hạn là kiểm tra cải thiện của MoE head trên nhiều ngôn ngữ và backbone.
@@ -24,15 +36,15 @@ cải thiện hoặc tổng quát đa ngôn ngữ. Tham chiếu quyết định 
 - Cặp model/head native có pooling/dropout khác nhau; đây là screening hệ thống
   backbone + native head, không phải ablation cô lập riêng encoder.
 - Smoke giới hạn 64 mẫu train/32 validation, 1 epoch, tắt W&B; ID riêng bảo đảm
-  không tiêu thụ ID full run. Hai session phải dùng group khác nhau, không auto-cấp
-  ID độc lập từ hai bản tracker. Group chạy tuần tự trên một GPU mỗi session.
+  không tiêu thụ ID full run. Hai session phải dùng group khác nhau và kiểm tra ID
+  trên W&B/storage và tracker. Group chạy tuần tự trên một GPU mỗi session.
 - Khởi chạy group smoke trước rồi group screening cùng dataset. Lệnh ở README.
   Nếu run-003 đã hoàn thành với cùng resolved config/provenance, đối chiếu artifact
   để tái dùng; chạy riêng exp-007 thay vì chạy lại toàn group ViANLI.
 - Group từ chối ghi đè run đã dùng. Retry phải đăng ký ID mới. Không tự đổi batch
   chỉ cho một backbone khi OOM; cần thống nhất lại budget của cặp so sánh và ID liên quan.
-- Lưu runs, tracker và console của từng session riêng trước khi kết thúc Kaggle.
-  Khi nhập về, đối chiếu từng dòng bằng run_id; không ghi đè toàn CSV của session kia.
+- Lưu runs, console và W&B URL của từng session trước khi kết thúc Kaggle.
+  Với hai session độc lập, giữ từng bản CSV và đối chiếu theo run_id khi nhập về, không ghi đè cả file.
 
 Chọn hướng tiếp theo bằng validation và chi phí thực đo. Một seed là screening;
 giữ cả hai backbone để xác nhận MoE nếu ngân sách cho phép. Chưa khóa finalist,

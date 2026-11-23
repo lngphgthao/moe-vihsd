@@ -1,5 +1,4 @@
 """Contract của screening multilingual: raw data, revision đúng và run ID riêng."""
-import csv
 from pathlib import Path
 import unittest
 
@@ -36,9 +35,7 @@ class TestMultilingualScreening(unittest.TestCase):
                 self.assertEqual(prepare.call_args.args[0]['tokenizer'], backbone)
                 self.assertEqual(prepare.call_args.args[0]['tokenizer_revision'], config['model']['revision'])
 
-    def test_groups_keep_smoke_full_ids_separate_and_registered(self):
-        rows = list(csv.DictReader((ROOT / 'experiments/experiment_tracker.csv').read_text(encoding='utf-8').splitlines()))
-        tracker = {row['run_id']: row for row in rows}
+    def test_groups_keep_smoke_full_ids_separate_with_csv_tracking(self):
         ids = set()
         for dataset in ['vianli', 'vihsd']:
             for mode in ['screening', 'smoke']:
@@ -51,9 +48,5 @@ class TestMultilingualScreening(unittest.TestCase):
                     self.assertNotIn(entry['run_id'], ids)
                     ids.add(entry['run_id'])
                     config = load_config(ROOT / 'configs/groups' / entry['config'])
-                    record = tracker[entry['run_id']]
-                    self.assertEqual(record['experiment_id'], config['experiment_id'])
-                    self.assertEqual(int(record['seed']), entry['seed'])
+                    self.assertTrue(config['logging']['use_tracker'])
                     self.assertEqual(entry['seed'], 42)
-                    self.assertEqual(record['profile'], 'smoke' if mode == 'smoke' else 'full')
-                    self.assertIn(record['status'], {'planned', 'running', 'completed', 'failed', 'invalid', 'anomaly', 'reproduced', 'final'})

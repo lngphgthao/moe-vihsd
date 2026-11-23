@@ -21,8 +21,14 @@ class TestGroups(unittest.TestCase):
                 self.assertEqual(len(rows), 2)
                 self.assertTrue(all(row["status"] == "planned" for row in rows))
                 calls.append(argv)
+            group = load_config(ROOT / "configs/groups/vianli_screening.yaml")
+            group["overrides"] = {"logging.use_tracker": True}
+            for entry in group["runs"]:
+                entry["config"] = str((ROOT / "configs/groups" / entry["config"]).resolve())
+            group_path = Path(directory) / "tracked_group.yaml"
+            group_path.write_text(yaml.safe_dump(group), encoding="utf-8")
             with patch("train.main", side_effect=train):
-                run_group(ROOT / "configs/groups/vianli_screening.yaml", True, tracker=tracker)
+                run_group(group_path, True, tracker=tracker)
             self.assertEqual(len(calls), 2)
             self.assertIn("--smoke-test", calls[0])
             self.assertIn("seed=42", calls[0])

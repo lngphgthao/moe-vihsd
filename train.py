@@ -7,7 +7,7 @@ from src.utils import apply_overrides, load_config
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Train a dense encoder with an original or MoE classification head.")
     parser.add_argument("--config", required=True)
-    parser.add_argument("--run-id")
+    parser.add_argument("--run-id", help="Unique run-NNN ID; required when CSV tracking is disabled.")
     parser.add_argument("--set", dest="overrides", action="append", default=[])
     parser.add_argument("--smoke-test", action=argparse.BooleanOptionalAction, default=None)
     args = parser.parse_args(argv)

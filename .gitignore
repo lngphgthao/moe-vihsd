@@ -43,3 +43,6 @@ Thumbs.db
 *.tmp
 *.temp
 *.bak
+
+# Runtime lock for the versioned experiment tracker
+/experiments/experiment_tracker.lock

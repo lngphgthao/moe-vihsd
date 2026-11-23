@@ -43,15 +43,19 @@ class TestRunPipeline(unittest.TestCase):
             cfg["model"]["head"].update(expert_hidden_dim=12, dropout=0.0)
         cfg["training"].update(epochs=2, batch_size=2)
         cfg["logging"]["use_wandb"] = False
+        cfg["logging"]["use_tracker"] = True
         cfg["diagnostics"]["collect_model_diagnostics"] = True
         cfg["paths"]["runs_dir"] = str(Path(directory) / "runs")
         return cfg
 
     def test_train_cli_restores_best_checkpoint_and_final_test_is_locked(self):
-        for kind, frequency, expected in [("original", None, [3, 6]), ("moe", 2, [2, 4, 6]), ("moe", 4, [4, 6])]:
-            with self.subTest(kind=kind, frequency=frequency), tempfile.TemporaryDirectory() as directory:
+        cases = [("original", None, [3, 6], True), ("moe", 2, [2, 4, 6], True),
+                 ("moe", 4, [4, 6], True), ("original", 2, [2, 4, 6], False)]
+        for kind, frequency, expected, use_tracker in cases:
+            with self.subTest(kind=kind, frequency=frequency, use_tracker=use_tracker), tempfile.TemporaryDirectory() as directory:
                 config = self.config(directory, kind)
                 config["training"]["eval_frequency"] = frequency
+                config["logging"]["use_tracker"] = use_tracker
                 source = Path(directory) / "config.yaml"
                 source.write_text(yaml.safe_dump(config), encoding="utf-8")
                 tracker = Path(directory) / "tracker.csv"
@@ -86,9 +90,13 @@ class TestRunPipeline(unittest.TestCase):
                         self.assertAlmostEqual(record["loss"], record["classification_loss"] + .01 * record["balance_loss"], places=6)
                 self.assertFalse((path / "evaluation/test.json").exists())
                 self.assertEqual(json.loads((path / "diagnostics/validation.json").read_text())["scope"], "example")
-                row = list(csv.DictReader(tracker.read_text(encoding="utf-8").splitlines()))[0]
-                self.assertEqual(row["val_macro_f1"], "1.0")
-                self.assertEqual(row["test_macro_f1"], "")
+                if use_tracker:
+                    row = list(csv.DictReader(tracker.read_text(encoding="utf-8").splitlines()))[0]
+                    self.assertEqual(row["val_macro_f1"], "1.0")
+                    self.assertEqual(row["test_macro_f1"], "")
+                else:
+                    self.assertFalse(tracker.exists())
+                    self.assertFalse(tracker.with_suffix(".lock").exists())
                 finalist = copy.deepcopy(config)
                 finalist["finalization"] = {"locked": True, "locked_at": "2026-11-22", "selection_reason": "offline test only", "seeds": [42]}
                 lockfile = Path(directory) / "finalist.yaml"
@@ -105,8 +113,12 @@ class TestRunPipeline(unittest.TestCase):
                 self.assertTrue((path / "evaluation/predictions.json").exists())
                 with self.assertRaises(FileExistsError):
                     evaluate.evaluate_run(path, lockfile, tracker=tracker)
-                with self.assertRaises(ValueError):
-                    reserve_run(config, "run-010", tracker=tracker)
+                if use_tracker:
+                    with self.assertRaises(ValueError):
+                        reserve_run(config, "run-010", tracker=tracker)
+                else:
+                    self.assertFalse(tracker.exists())
+                    self.assertFalse(tracker.with_suffix(".lock").exists())
 
     def test_failed_data_load_preserves_manifest_console_and_no_scores(self):
         with tempfile.TemporaryDirectory() as directory:

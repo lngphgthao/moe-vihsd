@@ -10,3 +10,4 @@ wandb>=0.16
 vncorenlp>=1.0.3
 sentencepiece>=0.2.0
 protobuf>=4.25
+filelock>=3.13

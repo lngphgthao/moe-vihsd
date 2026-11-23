@@ -13,6 +13,7 @@ import subprocess
 import sys
 
 import yaml
+from filelock import FileLock
 
 ROOT = Path(__file__).resolve().parents[2]
 TRACKER = ROOT / "experiments/experiment_tracker.csv"
@@ -54,12 +55,11 @@ def append_jsonl(path, value):
 
 
 @contextmanager
-def tracker_rows(path=TRACKER):
+def tracker_rows(path=TRACKER, *, timeout=30):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    lock = path.with_suffix(".lock")
-    descriptor = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-    try:
+    # OS lock is released even if a worker exits; the .lock file may remain.
+    with FileLock(str(path.with_suffix(".lock")), timeout=timeout):
         rows = []
         if path.exists():
             with path.open(encoding="utf-8", newline="") as stream:
@@ -70,16 +70,21 @@ def tracker_rows(path=TRACKER):
             writer = csv.DictWriter(stream, fieldnames=FIELDS)
             writer.writeheader()
             writer.writerows(rows)
+            stream.flush()
+            os.fsync(stream.fileno())
         temporary.replace(path)
-    finally:
-        os.close(descriptor)
-        lock.unlink()
 
 
 def reserve_run(config, run_id=None, *, tracker=TRACKER):
     experiment_id = config.get("experiment_id", "")
     if not re.fullmatch(r"exp-\d{3,}", experiment_id) or int(experiment_id[4:]) <= 2:
         raise ValueError("experiment_id must have the form exp-003")
+    if run_id is not None and (not re.fullmatch(r"run-\d{3,}", run_id) or int(run_id[4:]) <= 2):
+        raise ValueError("Use a new run-NNN ID after historical run-001/002")
+    if tracker is None:
+        if run_id is None:
+            raise ValueError("CSV tracker disabled: pass an explicit --run-id run-NNN or use a group with run_id entries")
+        return run_id
     with tracker_rows(tracker) as rows:
         if run_id is None:
             # run-001/002 are historical even when the active tracker is empty.
@@ -102,6 +107,16 @@ def reserve_run(config, run_id=None, *, tracker=TRACKER):
 
 
 def update_tracker(run_id, values, *, tracker=TRACKER):
+    if tracker is None:
+        return
+    values = dict(values)
+    dataset = values.get("dataset")
+    if isinstance(dataset, dict):
+        values["dataset"] = dataset.get("id", dataset.get("name"))
+    model = values.get("model")
+    if isinstance(model, dict):
+        values.update(backbone=model.get("backbone"), architecture="dense_encoder",
+                      variant=model.get("head", {}).get("type"))
     with tracker_rows(tracker) as rows:
         row = next(row for row in rows if row["run_id"] == run_id)
         row.update({k: v if v is not None else "" for k, v in values.items() if k in FIELDS})
@@ -135,8 +150,8 @@ class Tee:
 
 class RunArtifacts:
     def __init__(self, config, run_id, config_path, overrides, *, tracker=TRACKER):
-        self.tracker = tracker
-        self.run_id = reserve_run(config, run_id, tracker=tracker)
+        self.tracker = tracker if config.get("logging", {}).get("use_tracker", True) else None
+        self.run_id = reserve_run(config, run_id, tracker=self.tracker)
         run_root = Path(os.getenv("RUNS_DIR", config.get("paths", {}).get("runs_dir", "runs")))
         run_root.mkdir(parents=True, exist_ok=True)
         self.path = run_root / self.run_id
@@ -148,13 +163,14 @@ class RunArtifacts:
         commit = git_output("rev-parse", "HEAD")
         dirty = git_output("status", "--porcelain")
         packages = {}
-        for name in ("torch", "transformers", "datasets", "safetensors", "wandb", "vncorenlp"):
+        for name in ("torch", "transformers", "datasets", "safetensors", "wandb", "vncorenlp", "filelock"):
             try:
                 packages[name] = importlib.metadata.version(name)
             except importlib.metadata.PackageNotFoundError:
                 packages[name] = None
         self.manifest = dict(schema_version=1, experiment_id=config["experiment_id"], run_id=self.run_id,
                              status="running", verification="unverified", profile=config["profile"], seed=config["seed"],
+                             csv_tracker_enabled=self.tracker is not None,
                              started_at=now(), finished_at=None, config_path=str(config_path), cli_overrides=[{key: value} for key, value in (item.split("=", 1) for item in overrides)],
                              git_commit=commit, working_tree_dirty=bool(dirty) if dirty is not None else None,
                              config_fingerprint=config_fingerprint(config), dataset=config["dataset"], model=config["model"],

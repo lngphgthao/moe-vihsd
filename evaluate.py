@@ -16,6 +16,8 @@ from src.utils.artifacts import TRACKER, config_fingerprint, now, update_tracker
 def evaluate_run(run_dir, finalist_path, *, tracker=TRACKER):
     run_dir = Path(run_dir)
     config = load_config(run_dir / "resolved_config.yaml")
+    if not config.get("logging", {}).get("use_tracker", True):
+        tracker = None
     manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
     if "base_config" in (yaml.safe_load(Path(finalist_path).read_text(encoding="utf-8")) or {}):
         raise ValueError("Finalist must be a self-contained resolved configuration")

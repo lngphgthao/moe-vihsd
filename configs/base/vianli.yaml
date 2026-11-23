@@ -50,6 +50,7 @@ training:
 routing:
   balance_loss_coef: 0.01
 logging:
+  use_tracker: true
   use_wandb: true
   project: classifier-moe
   mode: online

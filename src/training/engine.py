@@ -1,5 +1,6 @@
 """Train/validation và optimizer dùng chung cho hai head."""
 import math
+import os
 import torch
 import torch.nn.functional as F
 from tqdm.auto import tqdm
@@ -195,7 +196,12 @@ def run_training(config, config_path, overrides, run_id=None, *, tracker=None):
             print(f"Run: {artifacts.run_id}; profile: {config['profile']}")
             set_seed(int(config["seed"]))
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-            artifacts.manifest["hardware"] = {"device": str(device), "gpu": torch.cuda.get_device_name() if device.type == "cuda" else None}
+            artifacts.manifest["hardware"] = {
+                "device": str(device), "gpu": torch.cuda.get_device_name() if device.type == "cuda" else None,
+                "cuda_visible_devices": os.getenv("CUDA_VISIBLE_DEVICES"),
+                "process_id": os.getpid(),
+                "visible_gpu_count": torch.cuda.device_count() if device.type == "cuda" else 0,
+            }
             if device.type == "cuda":
                 torch.cuda.reset_peak_memory_stats()
             bundle = prepare_run_data(config)
@@ -262,6 +268,8 @@ def run_training(config, config_path, overrides, run_id=None, *, tracker=None):
                         print(f"W&B logging pending: {error}")
 
             epochs = int(config["training"]["epochs"])
+            artifacts.manifest["training_started_at"] = now()
+            artifacts.save_manifest()
             for epoch in range(1, epochs + 1):
                 train_metrics = train_epoch(model, bundle.loaders["train"], optimizer, device, factor,
                                             epoch, epochs, config, bundle.label_names,
@@ -269,6 +277,8 @@ def run_training(config, config_path, overrides, run_id=None, *, tracker=None):
                 step += len(bundle.loaders["train"])
                 if not config["training"].get("eval_frequency"):
                     validate(train_metrics, epoch, step)
+            artifacts.manifest["training_finished_at"] = now()
+            artifacts.save_manifest()
             model.load_state_dict(load_file(str(checkpoint), device=str(device)))
             if config.get("diagnostics", {}).get("collect_model_diagnostics", False):
                 diagnostic = collect_model_diagnostics(model, bundle.loaders["validation"], device, bundle.label_names)

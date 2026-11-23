@@ -54,3 +54,41 @@ Nguồn metadata (đối chiếu 2026-11-23):
 Full run dùng run-003/007/008/009; diagnostic dùng run-010..013. Khóa ID trước
 khi phân phối sang hai session Kaggle; chưa có metric mới hoặc full run được xác nhận.
 One-seed screening không kết luận significance hoặc khả năng tổng quát đa ngôn ngữ.
+
+
+## D011 — 2026-11-23: tạm ngừng cập nhật CSV, theo dõi bằng W&B
+
+Theo chỉ đạo người dùng, không cập nhật tracker CSV trong repo/code ở workflow
+hiện hành. Giữ CSV làm hồ sơ tĩnh; W&B và artifact local tiếp tục liên kết run ID.
+Không xóa dữ liệu, CSV hoặc utility cũ.
+
+Thêm logging.use_tracker=false mặc định. Train/group/evaluate không đọc/ghi CSV
+hoặc tạo lock khi tắt. Train yêu cầu --run-id rõ ràng; group dùng ID entry. Hai process
+có thể dùng chung checkout và cache, mỗi process một GPU, ID và thư mục artifact riêng.
+Group runner vẫn tuần tự, không tự tạo process song song. Notebook bổ sung RUN_ID.
+
+CSV chỉ bật lại khi chủ động đặt logging.use_tracker=true. Khi bật, cơ chế lock cũ
+không chờ tranh chấp, nên không dùng cho hai writer đồng thời trong cùng checkout.
+Đây là thay đổi vận hành/logging, không đổi kiến trúc, toán học hoặc protocol lựa chọn
+checkpoint; không cần cấp lại experiment ID chỉ vì tắt CSV. Chưa kiểm chứng GPU.
+
+
+## D012 — 2026-11-23: bật lại CSV và xác nhận hai GPU trong một checkout
+
+Thay thế mặc định tạm tắt CSV ở D011 theo yêu cầu mới của người dùng. Base config
+và giá trị mặc định runtime bật tracker; opt-out rõ ràng use_tracker=false vẫn được giữ.
+Sửa lock sang FileLock có chờ 30 giây và khóa OS tự nhả khi process đóng; không xóa
+.lock sau mỗi lần ghi để tránh tách inode/khóa giữa các writer. CSV thay nguyên tử
+sau flush/fsync. Sửa mapping manifest dataset/model sang các cột scalar của tracker.
+Nguồn thư viện: https://py-filelock.readthedocs.io/en/latest/ ; khai báo dependency trực tiếp.
+
+Thêm notebook parallel_kaggle_smoke.ipynb, hai process trong cùng checkout, shared cache,
+mỗi process một GPU và run ID riêng. run-014/015 tham chiếu exp-003/007 nhưng dùng profile
+diagnostic (2 epoch, 256 train/64 validation, batch 8), không phải full research run.
+Lưu GPU mask, PID, visible GPU count và mốc thời gian train/validation vào manifest.
+Notebook chỉ xác nhận parallel nếu các training window chồng nhau và artifact/tracker
+đúng; kết quả CPU/fixture không được trình bày thành bằng chứng đã chạy GPU.
+
+Chưa chạy notebook trên Kaggle trong tác vụ chuẩn bị. Không khóa finalist, không đánh
+giá test và không thay đổi toán học của model/loss. Mốc kiểm chứng CPU được cập nhật
+trong ARCHITECTURE sau khi hoàn thành test.

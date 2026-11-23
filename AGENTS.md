@@ -18,7 +18,8 @@ Git root là thư mục `code/`; chạy lệnh từ đây. Tài liệu giải th
 
 Đọc README, source, caller và test liên quan. Sửa implementation cần đối chiếu
 `docs/ARCHITECTURE.md`; đổi phương pháp cần đối chiếu `docs/THESIS_SPECIFICATION.md`
-và `docs/DECISIONS.md`; đề xuất run cần xem `experiments/PLAN.md`, tracker và artifact.
+và `docs/DECISIONS.md`; đề xuất run cần xem `experiments/PLAN.md`, W&B và artifact.
+Theo D012, tracker CSV đã bật lại mặc định; đối chiếu cùng W&B và artifact.
 Tôn trọng working tree. Chỉ tạo module/thư mục khi có trách nhiệm và nội dung thực tế.
 
 ## 3. Cấu trúc và contract
@@ -37,13 +38,15 @@ Tôn trọng working tree. Chỉ tạo module/thư mục khi có trách nhiệm 
 
 - `configs/base/`: mặc định dataset/training, không phải finalist.
 - `configs/experiments/<dataset>/exp-NNN.yaml`: overlay có ID; dataset/backbone/head resolve rõ ràng.
-- `configs/groups/`: danh sách config, seed và run ID cụ thể; đăng ký trước khi chạy.
+- `configs/groups/`: danh sách config, seed và run ID cụ thể; kiểm tra trùng trên W&B/storage trước khi chạy.
 - `configs/diagnostics/`: giới hạn dữ liệu và mục tiêu kiểm tra rõ ràng.
 - Chỉ tạo `configs/finalists/<dataset>/` khi khóa finalist; lưu config đầy đủ cùng
   `finalization.locked`, `locked_at`, `selection_reason`, `seeds`.
 - `exp-001/002` và `run-001/002` đã dùng trong lịch sử, không tái sử dụng.
-- CLI có thể cấp run ID kế tiếp trong tracker; thư mục run tạo độc quyền để chống ghi đè.
-  Retry nhận ID mới. Đăng ký run trước khi phân phối sang Kaggle/Colab và kiểm tra ID giữa các máy.
+- `logging.use_tracker: true` là mặc định; CSV giữ một dòng mỗi run. Group có ID entry;
+  train có thể cấp ID kế tiếp từ CSV nhưng nên chỉ định rõ khi phân phối nhiều máy.
+  FileLock chờ writer khác tối đa 30 giây và CSV được thay nguyên tử; mkdir chống ghi đè.
+  Retry nhận ID mới. Khóa chỉ điều phối các process cùng filesystem, không đồng bộ hai máy.
 - Cấu hình nghiên cứu đã chạy mà thay đổi phải cấp experiment ID mới. CLI override được lưu;
   seed/profile diagnostic không biến metric diagnostic thành bằng chứng full run.
 
@@ -58,7 +61,9 @@ W&B là kênh theo dõi chính, đồng thời phải giữ artifact local. Tác
 `verification`, `wandb_sync`; mất kết nối W&B không làm mất run local. Lỗi thực thi
 phải giữ log và trạng thái failed. Lọc credentials khỏi config, log và snapshot.
 
-Tracker mỗi dòng một run, giữ validation/test riêng. Các trạng thái nghiên cứu:
+Tracker CSV bật mặc định theo yêu cầu mới, liên kết run_id với W&B và local artifact.
+Có thể chủ động tắt bằng logging.use_tracker=false; khi đó phải chỉ định run ID và
+không đọc/ghi CSV. CSV mỗi dòng một run, giữ validation/test riêng. Các trạng thái nghiên cứu:
 planned, running, completed, failed, invalid, anomaly, reproduced, final. Completed
 chưa đồng nghĩa verified. Thiếu số liệu thì để trống, không thay bằng zero.
 
@@ -96,7 +101,7 @@ unit/integration CPU, smoke GPU và thí nghiệm hoàn thành; không suy rộn
 
 ```bash
 python -m unittest discover -s tests -v
-python train.py --config configs/experiments/vianli/exp-003.yaml --smoke-test
+python train.py --config configs/experiments/vianli/exp-003.yaml --run-id run-010 --smoke-test
 python scripts/run_group.py --group-config configs/groups/vianli_screening.yaml --no-smoke-test
 python scripts/aggregate_results.py --runs-dir runs
 ```

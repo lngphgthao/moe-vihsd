@@ -74,11 +74,22 @@ Evaluator kiểm tra mapping và fingerprint dữ liệu/tokenizer so với run 
 
 ## Vòng đời run và artifact
 
-Tracker khóa ghi bằng file lock độc quyền, thay file CSV nguyên tử. Run ID có dạng run-NNN;
-run-001/002 dành cho lịch sử. Group liệt kê config/seed/run_id rõ ràng và đăng ký tất cả
-trước khi chạy. Mỗi retry dùng ID mới; mkdir không cho ghi đè run directory.
-Đây là khóa trên một filesystem, không thay thế tracker chung khi phân phối nhiều máy.
-Nếu tiến trình bị kill và để lại file lock, kiểm tra không còn writer trước khi xóa lock.
+Theo D012, logging.use_tracker=true là mặc định. Train/group đăng ký run planned,
+manifest chuyển running, engine cập nhật best validation và completed/failed; evaluate
+chỉ bổ sung test metrics sau khi khóa finalist. update_tracker chuẩn hóa dataset dict
+thành dataset ID và model thành backbone/architecture/variant trước khi ghi cột scalar.
+
+Tracker đọc-sửa-ghi dưới FileLock dùng khóa OS, chờ tối đa 30 giây; CSV được flush/fsync
+và thay nguyên tử. File .lock có thể tồn tại sau khi nhả khóa, không phải bằng chứng còn
+writer; không xóa file trong lúc worker chạy. Scope là cùng filesystem local, không
+đồng bộ hai máy hoặc hai session có tracker riêng. Opt-out use_tracker=false vẫn giữ
+hành vi không đọc/ghi CSV, khi đó train cần --run-id rõ ràng.
+
+Hai process có thể dùng cùng checkout/cache/RUNS_DIR nếu ID khác nhau và CUDA_VISIBLE_DEVICES
+riêng. Notebook parallel_kaggle_smoke dùng run-014/015 và diagnostic profile riêng; group
+runner thường vẫn tuần tự. Manifest hardware lưu GPU mask, số GPU nhìn thấy và PID.
+training_started_at/training_finished_at bao gồm vòng train/validation, phục vụ kiểm tra
+overlap; không dùng như benchmark GPU kernel time hoặc hiệu quả chạy riêng từng model.
 
 ```text
 runs/run-NNN/
@@ -110,7 +121,7 @@ wandb_sync tách riêng. W&B lỗi vẫn giữ local run; thư mục W&B offline
 Evaluate yêu cầu run-dir, finalist-config và final-evaluation. Chỉ nhận completed/full,
 config fingerprint khớp và seed nằm trong tập đã khóa cùng ngày/lý do khóa. Không có
 latest-run fallback, không ghi đè test đã có. Finalist lưu config đầy đủ, không phụ thuộc
-base_config có thể thay đổi. Kết quả test ghi local và tracker; W&B summary cập nhật khi có linkage online.
+base_config có thể thay đổi. Kết quả test ghi local; W&B summary cập nhật khi có linkage online. CSV cập nhật khi resolved config của run bật logging.use_tracker (mặc định).
 
 Aggregation chỉ đọc schema artifact mới, giữ validation/test riêng và missing là missing.
 Mean/sample SD nhóm theo experiment và fingerprint config (không gồm seed), chỉ full
@@ -186,3 +197,33 @@ Kiểm chứng setup ngày 2026-11-23 trên CPU, Transformers 5.5.0:
 - Chưa tải ViHSD raw có kiểm soát truy cập trong tác vụ này; source revision đối chiếu
   từ download metadata lịch sử. Runtime sẽ kiểm tra schema/split sizes. Chưa kiểm tra
   tải weights thật, chạy GPU, W&B online hoặc đánh giá test/finalist.
+
+
+## Kiểm chứng tắt CSV — 2026-11-23
+
+34 test offline đạt. Regression mới khởi tạo hai artifact đồng thời cùng checkout,
+giữ nguyên CSV giả lập và một lock đã có; default group không đăng ký/cập nhật CSV.
+Luồng train -> checkpoint -> final evaluation với dữ liệu tổng hợp chạy được khi tắt
+CSV và không tạo CSV/lock. Các test tính năng CSV cũ chỉ bật trên file tạm riêng.
+Checksum SHA-256 của experiments/experiment_tracker.csv giữ nguyên trước/sau toàn bộ
+tác vụ; notebook cells biên dịch được, compileall và diff check đạt. Log kiểm chứng
+ở runs/tracker_disabled_verification/, ngoài Git. Chưa kiểm chứng parallel GPU hoặc
+W&B online trong tác vụ này.
+
+## Kiểm chứng bật lại tracker và notebook song song — 2026-11-23
+
+Tracker CSV mặc định bật lại; FileLock tuần tự hóa cập nhật giữa các process trên
+cùng filesystem. Notebook `parallel_kaggle_smoke.ipynb` dành cho hai GPU riêng,
+run-014/015 là diagnostic đã đăng ký, chưa phải kết quả thực nghiệm.
+
+Kiểm chứng CPU: bộ 37 test trước khi thêm test notebook đạt; 5 test notebook
+riêng đạt; 3 test tracker riêng đạt. Lượt toàn bộ 42 test có một lỗi timeout chờ
+worker khởi động. Đã chuyển readiness barrier ra ngoài khoảng giữ lock để thời
+gian khởi động không tiêu thụ lock timeout; lượt chạy lại chưa có kết quả trong
+môi trường Windows hiện tại. Không ghi nhận toàn bộ 42 test là đạt. Diff check đạt.
+Log đã có được giữ ở `runs/parallel_setup_verification/`, ngoài Git.
+
+Chưa chạy notebook trên Kaggle, chưa kiểm chứng GPU hoặc W&B online. Chỉ xác nhận
+hai run song song sau khi cell cuối tạo `confirmation.json` với `passed: true`;
+điều kiện gồm mask GPU riêng, checkpoint riêng, tracker khớp và thời gian train/
+validation chồng nhau. Đây không phải kiểm chứng chất lượng mô hình hoặc test set.

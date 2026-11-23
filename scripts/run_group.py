@@ -1,4 +1,4 @@
-"""Đăng ký group run trước khi thực thi; mỗi retry dùng run ID mới."""
+"""Chạy group experiment; CSV tracker chỉ dùng khi bật rõ ràng."""
 import argparse
 from pathlib import Path
 import sys
@@ -34,7 +34,8 @@ def run_group(group_path, smoke_test=None, *, tracker=TRACKER):
     if not planned:
         raise ValueError("Group must contain explicit runs with config, seed and run_id")
     for config, _, run_id, _ in planned:
-        reserve_run(config, run_id, tracker=tracker)
+        csv_tracker = tracker if config.get("logging", {}).get("use_tracker", True) else None
+        reserve_run(config, run_id, tracker=csv_tracker)
     for _, path, run_id, overrides in planned:
         argv = ["--config", str(path), "--run-id", run_id]
         for override in overrides:
@@ -45,7 +46,7 @@ def run_group(group_path, smoke_test=None, *, tracker=TRACKER):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Reserve and execute a group of experiments.")
+    parser = argparse.ArgumentParser(description="Execute a group of experiments with explicit run IDs.")
     parser.add_argument("--group-config", required=True)
     parser.add_argument("--smoke-test", action=argparse.BooleanOptionalAction, default=None)
     args = parser.parse_args(argv)
