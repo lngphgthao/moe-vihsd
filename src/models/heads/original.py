@@ -1,5 +1,6 @@
 """Giữ head chuẩn của model phân lớp Hugging Face."""
 from torch import nn
+import torch
 from transformers import AutoModelForSequenceClassification, AutoConfig
 
 
@@ -8,11 +9,13 @@ class OriginalClassifier(nn.Module):
         super().__init__()
         if hf_config is None:
             self.model = AutoModelForSequenceClassification.from_pretrained(
-                config["backbone"], revision=config.get("revision"), num_labels=num_labels)
+                config["backbone"], revision=config.get("revision"), num_labels=num_labels,
+                torch_dtype=torch.float32)
         else:
             metadata = dict(hf_config)
             native_config = AutoConfig.for_model(metadata.pop("model_type"), **metadata)
             self.model = AutoModelForSequenceClassification.from_config(native_config)
+        self.model.to(dtype=torch.float32)
         if config.get("freeze_backbone", False):
             for parameter in self.model.base_model.parameters():
                 parameter.requires_grad = False

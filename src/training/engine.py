@@ -76,6 +76,24 @@ def train_epoch(
     )
     for batch_index, batch in enumerate(progress, start=1):
         labels = batch["labels"].to(device)
+        invalid_input = [
+            name for name in ("input_ids", "attention_mask", "token_type_ids")
+            if name in batch and not torch.isfinite(batch[name]).all()
+        ]
+        if invalid_input:
+            raise ValueError(
+                f"Non-finite input tensor at epoch={epoch} batch={batch_index}: "
+                f"{', '.join(invalid_input)}"
+            )
+        invalid_parameters = [
+            name for name, parameter in model.named_parameters()
+            if parameter.is_floating_point() and not torch.isfinite(parameter).all()
+        ]
+        if invalid_parameters:
+            raise ValueError(
+                f"Non-finite model parameters before forward at epoch={epoch} batch={batch_index}: "
+                f"{', '.join(invalid_parameters[:5])}"
+            )
         optimizer.zero_grad(set_to_none=True)
         logits, aux = standardize_model_output(model(**model_inputs_from_batch(batch, device)))
         if not torch.isfinite(logits).all():
@@ -100,6 +118,15 @@ def train_epoch(
                 "check logits, backbone precision and optimizer inputs"
             )
         optimizer.step()
+        non_finite_parameters = [
+            name for name, parameter in model.named_parameters()
+            if parameter.is_floating_point() and not torch.isfinite(parameter).all()
+        ]
+        if non_finite_parameters:
+            raise ValueError(
+                f"Optimizer produced non-finite parameters at epoch={epoch} batch={batch_index}: "
+                f"{', '.join(non_finite_parameters[:5])}"
+            )
         total_loss += loss.item() * labels.size(0)
         total_classification_loss += float(classification_loss.detach()) * labels.size(0)
         total_balance_loss += float(torch.as_tensor(balance_loss).detach()) * labels.size(0)
