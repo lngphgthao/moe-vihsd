@@ -1,5 +1,6 @@
 """Chạy group experiment; CSV tracker chỉ dùng khi bật rõ ràng."""
 import argparse
+import os
 from pathlib import Path
 import sys
 import yaml
@@ -33,6 +34,18 @@ def run_group(group_path, smoke_test=None, *, tracker=TRACKER):
         planned.append((config, config_path, run_id, arguments))
     if not planned:
         raise ValueError("Group must contain explicit runs with config, seed and run_id")
+    collisions = []
+    for config, _, run_id, _ in planned:
+        run_root = Path(os.getenv("RUNS_DIR", config.get("paths", {}).get("runs_dir", "runs")))
+        existing = run_root / run_id
+        if existing.exists():
+            collisions.append(str(existing))
+    if collisions:
+        raise ValueError(
+            "Artifact run đã tồn tại: "
+            + ", ".join(collisions)
+            + ". Không rerun ID cũ; giữ artifact/CSV hiện trạng và dùng run-NNN mới."
+        )
     for config, _, run_id, _ in planned:
         csv_tracker = tracker if config.get("logging", {}).get("use_tracker", True) else None
         reserve_run(config, run_id, tracker=csv_tracker)

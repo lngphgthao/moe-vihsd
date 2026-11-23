@@ -1,5 +1,6 @@
 """Group đăng ký tất cả run trước khi bắt đầu training."""
 import csv
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -12,6 +13,21 @@ from src.utils.artifacts import reserve_run
 ROOT = Path(__file__).resolve().parents[1]
 
 class TestGroups(unittest.TestCase):
+    def test_group_rejects_existing_artifact_before_reservation_or_launch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            run_root = root / "runs"
+            (run_root / "run-010").mkdir(parents=True)
+            tracker = root / "tracker.csv"
+            with patch.dict(os.environ, {"RUNS_DIR": str(run_root)}):
+                with self.assertRaisesRegex(ValueError, "run-010.*Không rerun ID cũ"):
+                    run_group(
+                        ROOT / "configs/groups/vianli_multilingual_smoke.yaml",
+                        True,
+                        tracker=tracker,
+                    )
+            self.assertFalse(tracker.exists())
+
     def test_group_paths_and_seeds_are_explicit_and_reserved(self):
         with tempfile.TemporaryDirectory() as directory:
             tracker = Path(directory) / "tracker.csv"
