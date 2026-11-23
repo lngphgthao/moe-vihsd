@@ -6,7 +6,10 @@ Theo D012, người dùng yêu cầu bật lại CSV và dùng notebook xác nh�
 W&B, tracker và local artifact cùng liên kết run_id. Base config mặc định
 logging.use_tracker=true; CSV dùng lock OS có chờ trên cùng filesystem.
 
-Notebook notebooks/parallel_kaggle_smoke.ipynb thử run-014 (exp-003/XLM-R) và run-015
+Run-014/015 failed với AttributeError: Tee.isatty theo log Kaggle người dùng gửi
+ngày 2026-11-23; chưa đối chiếu artifact đầy đủ, không có metric được nhập.
+Đã sửa giao diện console stream và thêm regression/preflight test.
+Notebook notebooks/parallel_kaggle_smoke.ipynb retry bằng run-016 (exp-003/XLM-R) và run-017
 (exp-007/mDeBERTa), original head trên ViANLI, 2 epoch, 256 train/64 validation,
 batch 8, seed 42. Đây là diagnostic chưa chạy trên GPU; không nhập score vào bảng
 screening full. Cell cuối phải xác nhận GPU mask 0/1, hai training window chồng nhau,

@@ -86,10 +86,16 @@ writer; không xóa file trong lúc worker chạy. Scope là cùng filesystem lo
 hành vi không đọc/ghi CSV, khi đó train cần --run-id rõ ràng.
 
 Hai process có thể dùng cùng checkout/cache/RUNS_DIR nếu ID khác nhau và CUDA_VISIBLE_DEVICES
-riêng. Notebook parallel_kaggle_smoke dùng run-014/015 và diagnostic profile riêng; group
+riêng. Notebook parallel_kaggle_smoke dùng run-016/017 để retry run-014/015 failed,
+với diagnostic profile riêng; group
 runner thường vẫn tuần tự. Manifest hardware lưu GPU mask, số GPU nhìn thấy và PID.
 training_started_at/training_finished_at bao gồm vòng train/validation, phục vụ kiểm tra
 overlap; không dùng như benchmark GPU kernel time hoặc hiệu quả chạy riêng từng model.
+
+Console dùng Tee để nhân bản text vào console.log và lọc credentials. Các thuộc tính/
+phương thức stream khác (isatty, encoding, fileno) được chuyển sang stream gốc để
+thư viện progress/download hoạt động. Context manager luôn khôi phục stdout/stderr
+khi thoát, kể cả khi có exception. Notebook kiểm tra console và tracker trước launch.
 
 ```text
 runs/run-NNN/
@@ -227,3 +233,18 @@ Chưa chạy notebook trên Kaggle, chưa kiểm chứng GPU hoặc W&B online. 
 hai run song song sau khi cell cuối tạo `confirmation.json` với `passed: true`;
 điều kiện gồm mask GPU riêng, checkpoint riêng, tracker khớp và thời gian train/
 validation chồng nhau. Đây không phải kiểm chứng chất lượng mô hình hoặc test set.
+
+## Sửa console stream sau lỗi Kaggle — 2026-11-23
+
+Theo log người dùng cung cấp, run-014/015 thoát mã 1 với AttributeError vì Tee
+thiếu isatty; chưa có bằng chứng training GPU thành công. Cell xác nhận báo false
+là đúng. Tracker ghi failed/unverified theo nguồn log này, không nhập metric.
+Retry đã đăng ký run-016/017, giữ nguyên experiment và diagnostic config.
+
+Regression tái hiện đúng AttributeError trước sửa. Sau khi chuyển các truy vấn
+stream sang original, cả 44 test CPU/offline đạt với interpreter .venv và
+OMP_NUM_THREADS=MKL_NUM_THREADS=2. Test mới kiểm tra terminal/non-terminal,
+encoding/errors/fileno, progress bar, lọc secret và khôi phục stdout/stderr khi lỗi.
+Notebook biên dịch được và chạy preflight console/tracker trước launch. Diff check
+đạt; log ở runs/parallel_setup_verification/tee_full_tests.log. Đây là kiểm chứng
+CPU; chưa chạy retry trên Kaggle, pretrained download hoặc W&B online.

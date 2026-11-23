@@ -76,7 +76,7 @@ model/optimizer và artifact riêng. Bật T4 x2, Internet và secrets HF_TOKEN/
 push/upload code mới trước khi chạy.
 
 1. Setup repo/dependency, secrets và kiểm tra hai GPU.
-2. Chạy test tracker offline, đăng ký run-014/015 rồi làm ấm cache model/dataset.
+2. Chạy test console/tracker offline, đăng ký run-016/017 rồi làm ấm cache model/dataset.
 3. Launch XLM-R (exp-003) trên GPU 0, mDeBERTa (exp-007) trên GPU 1. Cả hai là
    diagnostic original-head, 2 epoch, 256 train/64 validation, batch 8, seed 42.
 4. Xem GPU memory/utilization và log mỗi 10 giây; chờ cả hai kết thúc.
@@ -84,7 +84,9 @@ push/upload code mới trước khi chạy.
    metric hữu hạn, hai dòng CSV đúng metadata và W&B sync nếu bật. Lưu output; ZIP tùy chọn.
 
 PASS chỉ được xác nhận khi chạy notebook thực tế. Notebook không đánh giá test set.
-Nếu run-014/015 đã dùng, đổi sang ID mới; không reset trạng thái để ghi đè. Nếu chưa có
+Run-014/015 đã failed do lỗi Tee.isatty theo log Kaggle người dùng gửi; retry dùng
+run-016/017 sau khi cập nhật code. Cell setup không tự pull checkout đã tồn tại.
+Nếu ID đã dùng, đổi sang ID mới; không reset trạng thái để ghi đè. Nếu chưa có
 training overlap thì chưa xác nhận chạy song song, kể cả khi hai run hoàn tất riêng lẻ.
 
 CSV dùng OS-backed FileLock có chờ tối đa 30 giây; file .lock có thể còn sau khi nhả khóa,

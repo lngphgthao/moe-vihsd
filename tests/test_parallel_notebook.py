@@ -63,6 +63,7 @@ class TestParallelNotebook(unittest.TestCase):
                 self.assertEqual(cell['outputs'], [])
         setup_source = '\n'.join(NOTEBOOK.read_text(encoding='utf-8').splitlines())
         self.assertIn('HF_HUB_DISABLE_XET', setup_source)
+        self.assertIn('test_console_stream.py', setup_source)
         for name in ['vianli_xlmr_parallel_smoke.yaml', 'vianli_mdeberta_parallel_smoke.yaml']:
             config = load_config(ROOT / 'configs/diagnostics' / name)
             self.assertTrue(config['logging']['use_tracker'])

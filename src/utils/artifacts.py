@@ -136,6 +136,9 @@ def config_fingerprint(config):
 class Tee:
     def __init__(self, original, log):
         self.original, self.log = original, log
+    def __getattr__(self, name):
+        # Libraries query stream metadata (isatty, encoding, fileno) while logging.
+        return getattr(self.original, name)
     def write(self, value):
         consumed = len(value)
         value = sanitized(value)
