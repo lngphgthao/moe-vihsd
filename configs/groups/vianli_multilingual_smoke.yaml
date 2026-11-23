@@ -1,8 +1,8 @@
 runs:
-- run_id: run-010
+- run_id: auto
   config: ../experiments/vianli/exp-003.yaml
   seed: 42
-- run_id: run-011
+- run_id: auto
   config: ../experiments/vianli/exp-007.yaml
   seed: 42
 overrides:

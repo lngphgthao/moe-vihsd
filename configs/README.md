@@ -2,6 +2,9 @@
 
 Base chứa mặc định; experiments chứa overlay có ID; groups khai báo từng config, seed,
 run_id; diagnostics chứa mục đích và giới hạn mẫu. Dùng base_config tương đối theo file.
+Trong group smoke tái chạy, dùng `run_id: auto` để quét tracker và thư mục artifact,
+từ đó cấp ID kế tiếp còn trống thay vì ghi đè. Với full/repro cần giữ `run_id` cụ thể
+để cố định provenance; group cố ý trùng artifact của run explicit sẽ dừng với lỗi.
 Model chỉ nhận backbone/revision/freeze_backbone và head.type original hoặc moe.
 MoE tách router.scoring=linear, router.selection=top_k, router.top_k khỏi expert settings.
 Trainer nhận routing.balance_loss_coef; head trả balance_loss thô.

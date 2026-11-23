@@ -79,17 +79,32 @@ def reserve_run(config, run_id=None, *, tracker=TRACKER):
     experiment_id = config.get("experiment_id", "")
     if not re.fullmatch(r"exp-\d{3,}", experiment_id) or int(experiment_id[4:]) <= 2:
         raise ValueError("experiment_id must have the form exp-003")
-    if run_id is not None and (not re.fullmatch(r"run-\d{3,}", run_id) or int(run_id[4:]) <= 2):
+    if run_id is not None and run_id != "auto" and (not re.fullmatch(r"run-\d{3,}", run_id) or int(run_id[4:]) <= 2):
         raise ValueError("Use a new run-NNN ID after historical run-001/002")
     if tracker is None:
-        if run_id is None:
-            raise ValueError("CSV tracker disabled: pass an explicit --run-id run-NNN or use a group with run_id entries")
+        if run_id in (None, "auto"):
+            run_root = Path(os.getenv("RUNS_DIR", config.get("paths", {}).get("runs_dir", "runs")))
+            used = [2]
+            if run_root.exists():
+                used.extend(int(path.name[4:]) for path in run_root.iterdir()
+                            if re.fullmatch(r"run-\d+", path.name))
+            candidate = max(used) + 1
+            while (run_root / f"run-{candidate:03d}").exists():
+                candidate += 1
+            return f"run-{candidate:03d}"
         return run_id
     with tracker_rows(tracker) as rows:
-        if run_id is None:
+        if run_id in (None, "auto"):
             # run-001/002 are historical even when the active tracker is empty.
             used = [2] + [int(r["run_id"][4:]) for r in rows if re.fullmatch(r"run-\d+", r["run_id"])]
-            run_id = f"run-{max(used) + 1:03d}"
+            run_root = Path(os.getenv("RUNS_DIR", config.get("paths", {}).get("runs_dir", "runs")))
+            if run_root.exists():
+                used.extend(int(path.name[4:]) for path in run_root.iterdir()
+                            if re.fullmatch(r"run-\d+", path.name))
+            candidate = max(used) + 1
+            while (run_root / f"run-{candidate:03d}").exists():
+                candidate += 1
+            run_id = f"run-{candidate:03d}"
         if not re.fullmatch(r"run-\d{3,}", run_id) or int(run_id[4:]) <= 2:
             raise ValueError("Use a new run-NNN ID after historical run-001/002")
         existing = next((row for row in rows if row["run_id"] == run_id), None)
