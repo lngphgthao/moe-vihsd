@@ -78,13 +78,27 @@ def train_epoch(
         labels = batch["labels"].to(device)
         optimizer.zero_grad(set_to_none=True)
         logits, aux = standardize_model_output(model(**model_inputs_from_batch(batch, device)))
+        if not torch.isfinite(logits).all():
+            raise ValueError(
+                f"Non-finite logits at epoch={epoch} batch={batch_index}; "
+                f"min={logits.min().item():.6g} max={logits.max().item():.6g}"
+            )
         classification_loss = compute_task_loss(logits, labels, config)
         balance_loss = aux.get("balance_loss", 0.0)
         loss = classification_loss + balance_factor * balance_loss
         if not torch.isfinite(loss):
-            raise ValueError("Non-finite training loss")
+            raise ValueError(
+                f"Non-finite training loss at epoch={epoch} batch={batch_index}: "
+                f"classification={float(classification_loss.detach()) if torch.isfinite(classification_loss) else 'non-finite'}, "
+                f"balance={float(torch.as_tensor(balance_loss).detach()) if torch.isfinite(torch.as_tensor(balance_loss)) else 'non-finite'}"
+            )
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+        grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+        if not torch.isfinite(grad_norm):
+            raise ValueError(
+                f"Non-finite gradient norm at epoch={epoch} batch={batch_index}; "
+                "check logits, backbone precision and optimizer inputs"
+            )
         optimizer.step()
         total_loss += loss.item() * labels.size(0)
         total_classification_loss += float(classification_loss.detach()) * labels.size(0)
