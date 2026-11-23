@@ -21,6 +21,16 @@ python -m unittest discover -s tests -v
 Credentials lấy qua `HF_TOKEN`, `WANDB_API_KEY` hoặc secrets của nền tảng. Không commit `.env`.
 Không nâng dependency cùng lúc với thay đổi phương pháp nếu chưa kiểm chứng lại.
 
+## CI
+
+GitHub Actions chạy bộ unittest offline trên Ubuntu/Python 3.12 cho mỗi push vào `main`
+và pull request. CI kiểm tra notebook compile, cấu trúc config, artifact/tracker,
+forward/backward, checkpoint, runner và overlap fixture; không tải model/dataset,
+không gọi W&B và không yêu cầu GPU.
+
+Xác nhận thực tế hai GPU T4 vẫn chạy thủ công bằng
+`notebooks/parallel_kaggle_smoke.ipynb` trên Kaggle. CI không thay thế live smoke GPU.
+
 ## Dữ liệu
 
 XLM-R/mBERT dùng text gốc; PhoBERT cần bản segmented tương ứng. Config ViANLI mẫu
