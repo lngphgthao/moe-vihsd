@@ -1,13 +1,22 @@
 # Phạm vi luận văn hiện hành
 
-Cập nhật phạm vi triển khai 2026-11-23. Nghiên cứu áp dụng Mixture of Experts cho phân lớp văn bản tiếng Việt,
+Cập nhật phạm vi triển khai 2026-11-24. Nghiên cứu áp dụng Mixture of Experts cho phân lớp văn bản tiếng Việt,
 với MoE tại classifier/head trên encoder dense. ViANLI (premise/hypothesis) và ViHSD
-(single text) là điểm xuất phát. XLM-R, PhoBERT và mBERT là backbone có thể khảo sát;
-config chạy cụ thể cần lý do lựa chọn và ngân sách.
+(single text) là điểm xuất phát. Theo D013, cố định **vinai/phobert-base** cho nghiên cứu
+thiết kế classifier; đây là lựa chọn backbone, không phải khóa config finalist.
 
-Ưu tiên hiện hành (D010): screening XLM-R-base và mDeBERTa-v3-base với original
-head trên cả hai dataset. Hướng dài hạn là kiểm tra cải thiện MoE qua nhiều ngôn ngữ;
-chưa thêm ngôn ngữ mới và dữ liệu hiện tại chưa đủ để xác nhận khả năng đó.
+Ưu tiên hiện hành thay thế D010: kiểm chứng original PhoBERT-base, rồi khảo sát
+pooling, expert, scoring, selection, balance loss và đường kết hợp của MoE head.
+Không tiếp tục chọn backbone bằng bảng xếp hạng multilingual. Config và hồ sơ XLM-R/
+mDeBERTa giữ nguyên. Kết luận giới hạn ở PhoBERT-base và các dataset được khảo sát;
+không tuyên bố tổng quát qua backbone hoặc ngôn ngữ.
+
+PhoBERT có bằng chứng trên nhiều tác vụ tiếng Việt, gồm NLI
+([Nguyen & Nguyen, 2020](https://aclanthology.org/2020.findings-emnlp.92/)).
+Đây là cơ sở lựa chọn phù hợp, không phải bằng chứng ổn định trên ViANLI/ViHSD hiện tại.
+Sự hội tụ, biến động giữa seed, segmentation, truncation và chi phí cần kiểm chứng tại chỗ.
+Chọn đúng bản base gốc, không thay bằng base-v2. Model/tokenizer cùng revision
+`01daacda68afe13d83023d16ec647239e344a1e6`.
 
 ## Câu hỏi nghiên cứu
 

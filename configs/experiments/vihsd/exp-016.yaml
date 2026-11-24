@@ -1,0 +1,7 @@
+# Giai đoạn 1: C2, khớp tổng head parameters M0 ở d=768 và 3 nhãn.
+# H=2051 tính cả router E=1 còn đăng ký nhưng không học từ task loss.
+base_config: exp-015.yaml
+experiment_id: exp-016
+model:
+  head:
+    expert_hidden_dim: 2051

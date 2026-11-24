@@ -1,0 +1,16 @@
+# Baseline original pin revision mới; giữ exp-005 làm hồ sơ đăng ký trước đây.
+base_config: ../../base/vihsd.yaml
+experiment_id: exp-011
+dataset:
+  name: data/processed/vihsd_segmented
+  revision: null
+  tokenizer_revision: 01daacda68afe13d83023d16ec647239e344a1e6
+  max_length: 128
+model:
+  backbone: vinai/phobert-base
+  revision: 01daacda68afe13d83023d16ec647239e344a1e6
+  freeze_backbone: false
+  head:
+    type: original
+diagnostics:
+  collect_model_diagnostics: true

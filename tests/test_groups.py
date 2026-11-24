@@ -24,7 +24,13 @@ class TestGroups(unittest.TestCase):
                 calls.append(argv)
             with patch.dict(os.environ, {"RUNS_DIR": str(run_root)}):
                 with patch("train.main", side_effect=train):
-                    run_group(ROOT / "configs/groups/vianli_multilingual_smoke.yaml", True, tracker=tracker)
+                    group = load_config(ROOT / "configs/groups/vianli_multilingual_screening.yaml")
+                    for entry in group['runs']:
+                        entry['run_id'] = 'auto'
+                        entry['config'] = str((ROOT / 'configs/groups' / entry['config']).resolve())
+                    group_path = root / 'auto_group.yaml'
+                    group_path.write_text(yaml.safe_dump(group), encoding='utf-8')
+                    run_group(group_path, True, tracker=tracker)
             run_ids = [argv[argv.index("--run-id") + 1] for argv in calls]
             self.assertEqual(run_ids, ["run-011", "run-012"])
 

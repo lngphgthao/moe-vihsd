@@ -1,0 +1,11 @@
+# Giai đoạn 1: C1, một expert MLP, không học lựa chọn routing.
+base_config: exp-017.yaml
+experiment_id: exp-015
+model:
+  head:
+    num_experts: 1
+    expert_hidden_dim: 512
+    router:
+      top_k: 1
+routing:
+  balance_loss_coef: 0.0

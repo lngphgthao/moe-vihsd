@@ -44,13 +44,14 @@ class TestTrackerDisabled(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             tracker = Path(directory) / 'tracker.csv'
             tracker.write_bytes(b'keep-existing-csv')
-            group = load_config(ROOT / 'configs/groups/vianli_multilingual_smoke.yaml')
-            group['overrides']['logging.use_tracker'] = False
+            group = load_config(ROOT / 'configs/groups/vianli_multilingual_screening.yaml')
+            group.setdefault('overrides', {})['logging.use_tracker'] = False
             for entry in group['runs']:
                 entry['config'] = str((ROOT / 'configs/groups' / entry['config']).resolve())
             path = Path(directory) / 'group.yaml'
             path.write_text(yaml.safe_dump(group), encoding='utf-8')
-            with patch('train.main') as train, patch('scripts.run_group.reserve_run', wraps=reserve_run) as reserve:
+            with patch.dict('os.environ', {'RUNS_DIR': str(Path(directory) / 'runs')}), \
+                    patch('train.main') as train, patch('scripts.run_group.reserve_run', wraps=reserve_run) as reserve:
                 run_group(path, True, tracker=tracker)
             self.assertEqual(train.call_count, 2)
             self.assertTrue(all(call.kwargs['tracker'] is None for call in reserve.call_args_list))

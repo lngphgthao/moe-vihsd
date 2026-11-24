@@ -2,7 +2,65 @@
 
 Cập nhật sau refactor ngày 2026-11-22. Chỉ có dense encoder và hai loại head.
 
+## Smoke qua CLI — 2026-11-25
+
+Theo yêu cầu người dùng, không giữ YAML dành riêng cho smoke. Experiment và group
+chính dùng chung cho `--smoke-test`/`--no-smoke-test`; `training.smoke` trong base
+giữ giới hạn diagnostic. Cờ chỉ chọn profile, không tự tắt W&B. Run ID vẫn dùng một
+lần, kể cả khi đổi giữa smoke/full. Các mô tả file smoke ở mục kiểm chứng trước đây
+là lịch sử setup; không phải config hiện hành. Diagnostic tiny-overfit vẫn giữ riêng.
+
+Notebook baseline hiện tại dùng group `phobert_original_pair_baseline.yaml` cho cả
+hai chế độ; giữ workflow tuần tự người dùng đã cập nhật. Test config kiểm tra cùng
+overlay ở cả hai profile và giữ danh sách seed hiện có trong group baseline.
+
+Kiểm chứng đợt dọn: không còn YAML smoke; cú pháp YAML/Python, đường dẫn kế thừa/
+group và hai profile của 8 experiment PhoBERT đạt. Lượt full CPU/offline chạy ngoài
+sandbox đạt 47/48 test, một test notebook có 3 subtest lỗi do helper bỏ dòng shell
+IPython làm rỗng suite của if. Đã sửa helper giữ indentation bằng pass, kiểm tra
+contract trên source gốc; sau sửa 3 test notebook chạy cô lập đạt (dùng function
+config/profile gốc, không import encoder). Chưa chạy lại toàn bộ suite sau sửa helper.
+Không chạy notebook trên GPU hoặc nghiên cứu mới trong tác vụ dọn config.
+
+## Config PhoBERT-base và kiểm chứng — 2026-11-24
+
+Theo D013, exp-010/011 dùng original PhoBERT-base cho ViANLI/ViHSD, cùng revision
+model/tokenizer `01daacda68afe13d83023d16ec647239e344a1e6`, DatasetDict local segmented.
+Không thay đổi implementation, công thức MoE/router hoặc các config đã đăng ký trước.
+Pool/activation/selection mới trong PLAN chỉ là thiết kế đề xuất nếu ghi cần triển khai.
+
+Kiểm chứng local CPU/offline bằng `.venv`:
+- Resolve hai overlay, validate head, model/tokenizer revision, budget và smoke profile
+  1 epoch/64 train/32 validation đều đạt; không gọi training pretrained.
+- Schema và split sizes train/validation khớp config: ViANLI 8012/1000, ViHSD
+  24048/2672. Không có text null ở các field đầu vào. ViHSD train có 2 chuỗi rỗng;
+  loader hiện chỉ lọc null nên vẫn giữ 24048 example, khác bản Hub raw lọc còn 24046.
+  Không tự xóa mẫu hoặc sửa bản dữ liệu lịch sử trong tác vụ cấu hình.
+- Bộ `python -m unittest discover -s tests -v` với OMP_NUM_THREADS=MKL_NUM_THREADS=2
+  chạy 46 test: 45 đạt, 1 fail ở `test_main_notebooks_leave_offline_suite_to_ci` vì
+  `main_kaggle.ipynb` thiếu chuỗi `GitHub Actions`. Notebook/test liên quan không đổi
+  so với HEAD trong tác vụ này; không ghi nhận toàn bộ suite là đạt.
+- `git diff --check` đạt. Chưa đo truncation, tải weights/tokenizer thật cho config mới,
+  smoke GPU, W&B online hoặc full run. Pin model không xác minh segmentation lịch sử.
+
 ## Cấu trúc
+
+Setup giai đoạn 0–1 ngày 2026-11-25 (D014): thêm config C1/C2/M0, hai diagnostic
+original và tám group theo dataset. Tái sử dụng factory/MoEHead hiện hành, không đổi
+implementation. Config MoE kế thừa original cùng dataset; C1 kế thừa M0, C2 kế thừa
+C1. W&B project giữ cmoe_vianli/cmoe_vihsd theo base người dùng đã sửa.
+
+Test notebook đã bỏ yêu cầu markdown có chữ `GitHub Actions`; thay bằng kiểm tra
+code notebook không tự chạy unittest và workflow CI thực sự chạy suite offline.
+Test giai đoạn mới kiểm tra config/profile/seed/ID group và forward/backward/count
+tham số head C1/C2/M0 trên CPU, không tải encoder hoặc dữ liệu từ mạng.
+
+Kiểm chứng 2026-11-25: tái hiện lỗi notebook trước sửa; sau sửa 7 test tập trung đạt,
+toàn bộ 49 test CPU/offline đạt bằng `.venv` (OMP_NUM_THREADS=MKL_NUM_THREADS=2;
+HF_HUB_OFFLINE/TRANSFORMERS_OFFLINE/HF_DATASETS_OFFLINE=1, WANDB_MODE=offline).
+Forward/backward và count xác nhận C1=790788, C2=M0=3156231 head parameters.
+Diff check đạt; src/notebooks/tracker CSV không đổi trong tác vụ giai đoạn 0–1.
+Chưa chạy smoke GPU, pretrained full run hoặc đối chiếu run ID trên W&B/storage từ xa.
 
 ```text
 train.py / evaluate.py           CLI điều phối
@@ -86,7 +144,7 @@ writer; không xóa file trong lúc worker chạy. Scope là cùng filesystem lo
 hành vi không đọc/ghi CSV, khi đó train cần --run-id rõ ràng.
 
 Hai process có thể dùng cùng checkout/cache/RUNS_DIR nếu ID khác nhau và CUDA_VISIBLE_DEVICES
-riêng. Notebook parallel_kaggle_smoke dùng run-016/017 để retry run-014/015 failed,
+riêng. Phiên bản cũ của notebook parallel_kaggle_smoke dùng run-016/017 để retry run-014/015 failed,
 với diagnostic profile riêng; group
 runner thường vẫn tuần tự. Manifest hardware lưu GPU mask, số GPU nhìn thấy và PID.
 training_started_at/training_finished_at bao gồm vòng train/validation, phục vụ kiểm tra

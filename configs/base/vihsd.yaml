@@ -51,7 +51,7 @@ routing:
 logging:
   use_tracker: true
   use_wandb: true
-  project: classifier-moe
+  project: cmoe_vihsd
   mode: online
 diagnostics:
   collect_model_diagnostics: false

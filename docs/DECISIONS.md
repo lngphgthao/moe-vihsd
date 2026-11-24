@@ -1,5 +1,61 @@
 # Quyết định hiện hành
 
+## D014 — 2026-11-25: khởi tạo config PhoBERT giai đoạn 0–1
+
+Theo yêu cầu người dùng, cụ thể hóa C1/C2/M0 trong PLAN thành exp-012/013/014 cho
+ViANLI và exp-015/016/017 cho ViHSD. Giữ original exp-010/011, revision và budget
+đã chọn; không thay toán học model/router/loss. Mỗi experiment mới kế thừa cùng dữ liệu
+segmented và diagnostics validation của original. Không chạy nghiên cứu GPU ở bước này.
+
+C1 dùng E=1,k=1,H=512, coef=0. C2 dùng cùng single-expert control với H=2051 để
+khớp tổng head parameters M0 tại d=768, 3 nhãn. M0 E=4,k=2,H=512,GELU,dropout=0.1,
+linear scoring/top-k, coef=0.01, CLS, không residual/shared expert. Tổng tham số head
+C1=790788, C2=M0=3156231, gồm router còn đăng ký và classifier. Router E=1 không
+học từ task loss; không khẳng định khớp active compute/runtime hoặc số tham số có gradient.
+
+Thêm hai diagnostic original và tám group theo dataset/stage, IDs dự kiến run-020..039:
+stage0 smoke, baseline [42,123,2026], stage1 smoke C1/C2/M0 và screening seed 42.
+ID chỉ đối chiếu local, chưa kiểm tra/đặt chỗ W&B/storage từ xa; không cập nhật CSV hoặc
+metric trong tác vụ setup. Trước launch phải đối chiếu ID, tái dùng baseline cũ chỉ khi
+fingerprint/seed/provenance khớp. Seed development không thay thế tập seed cuối chưa khóa.
+
+Giữ tên project người dùng đã sửa trong base config là cmoe_vianli/cmoe_vihsd.
+Không di chuyển run W&B cũ. Đổi project logging không thay đổi phương pháp nghiên cứu.
+
+Xem xét lỗi test notebook: bỏ assertion buộc có chữ `GitHub Actions` vì phụ thuộc câu
+chữ markdown, giữ kiểm tra code notebook không tự chạy unittest; kiểm tra trực tiếp
+workflow CI chạy suite với biến offline. Không sửa notebook chỉ để làm test đạt.
+
+## D013 — 2026-11-24: cố định PhoBERT-base, tập trung thiết kế MoE classifier
+
+Theo người dùng chốt, chọn `vinai/phobert-base` làm backbone cho cả ViANLI/ViHSD;
+không chọn base-v2. Thay thế ưu tiên screening backbone của D010, giữ nguyên hồ sơ cũ.
+Mục tiêu là so sánh các thiết kế classifier trên một dense encoder tiếng Việt cố định.
+Không cần chứng minh backbone tốt nhất; không suy rộng hiệu quả qua backbone/ngôn ngữ.
+
+Cơ sở: PhoBERT là encoder đơn ngữ có bằng chứng thực nghiệm trên nhiều tác vụ tiếng
+Việt, gồm NLI; xem [paper](https://aclanthology.org/2020.findings-emnlp.92/).
+Độ ổn định trong pipeline vẫn cần kiểm tra nhiều seed và chi phí thực đo.
+Metadata công khai [HF API](https://huggingface.co/api/models/vinai/phobert-base)
+được đối chiếu ngày 2026-11-24: revision `01daacda68afe13d83023d16ec647239e344a1e6`;
+pin cùng revision cho tokenizer, không kế thừa tokenizer revision XLM-R.
+
+Thêm exp-010 (ViANLI original) và exp-011 (ViHSD original), dữ liệu local segmented,
+fine-tune encoder, budget khởi đầu 7 epoch/batch 16/lr 1e-5/seed 42, CE, validation
+macro F1 chọn checkpoint. Dùng ID mới thay vì sửa exp-005 chưa pin revision. Chưa
+chạy GPU, chưa đăng ký run ID trên W&B/storage, chưa khóa finalist hoặc seed cuối.
+
+`experiments/PLAN.md` sở hữu bảng giai đoạn: baseline, reference MoE, số expert/routing/
+balance loss, representation/expert/đường kết hợp, cơ chế mới tùy chọn, xác nhận/ablation.
+Các cơ chế mới chỉ là đề xuất, chưa được factory hỗ trợ. Khi triển khai cần quyết định
+toán học cụ thể và experiment ID mới; không dùng config giả với key chưa hỗ trợ.
+So sánh capacity bằng single-expert/dense controls, không mặc định nhiều tham số là MoE tốt hơn.
+Giữ nguyên công thức expert/router/loss trong tác vụ này.
+
+Giới hạn dữ liệu segmented lịch sử theo `data/manifests/` vẫn còn: pin model hiện tại
+không xác minh lại recipe segmentation hoặc revision nguồn của từng file local.
+Phải kiểm tra truncation train/validation trước full, đặc biệt cặp câu ViANLI ở 256 token.
+
 ## D007 — 2026-11-21: ưu tiên MoE tại classifier/head
 
 Theo người dùng đã thống nhất với giảng viên: dùng encoder dense, khảo sát head/router,
@@ -92,3 +148,11 @@ Notebook chỉ xác nhận parallel nếu các training window chồng nhau và 
 Chưa chạy notebook trên Kaggle trong tác vụ chuẩn bị. Không khóa finalist, không đánh
 giá test và không thay đổi toán học của model/loss. Mốc kiểm chứng CPU được cập nhật
 trong ARCHITECTURE sau khi hoàn thành test.
+
+## 2026-11-25 — dùng CLI chọn smoke/full, không nhân bản config
+
+Theo yêu cầu người dùng, bỏ YAML chỉ dành cho smoke; cùng experiment/group chọn
+profile bằng --smoke-test hoặc --no-smoke-test. Giữ training.smoke trong base và
+diagnostic tiny-overfit có mục đích riêng. Không đổi phương pháp hoặc run lịch sử.
+Run ID vẫn dùng một lần cho mỗi lượt thực thi; không dùng lại ID smoke cho full.
+Các ghi nhận config smoke ở quyết định trước là lịch sử setup, không phải file hiện hành.

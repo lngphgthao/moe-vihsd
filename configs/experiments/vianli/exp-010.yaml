@@ -1,0 +1,16 @@
+# PhoBERT-base original; cần DatasetDict segmented. Phát triển bằng validation.
+base_config: ../../base/vianli.yaml
+experiment_id: exp-010
+dataset:
+  name: data/processed/vianli_segmented
+  revision: null
+  tokenizer_revision: 01daacda68afe13d83023d16ec647239e344a1e6
+  max_length: 256
+model:
+  backbone: vinai/phobert-base
+  revision: 01daacda68afe13d83023d16ec647239e344a1e6
+  freeze_backbone: false
+  head:
+    type: original
+diagnostics:
+  collect_model_diagnostics: true

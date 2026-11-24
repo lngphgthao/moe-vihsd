@@ -1,0 +1,20 @@
+# Giai đoạn 1: M0, reference MoE; kế thừa dữ liệu/budget original cùng dataset.
+base_config: exp-010.yaml
+experiment_id: exp-014
+model:
+  head:
+    type: moe
+    pooling: cls
+    num_experts: 4
+    expert_hidden_dim: 512
+    activation: gelu
+    dropout: 0.1
+    classifier_dropout: 0.0
+    shared_expert: false
+    use_residual: false
+    router:
+      scoring: linear
+      selection: top_k
+      top_k: 2
+routing:
+  balance_loss_coef: 0.01

@@ -1,0 +1,7 @@
+runs:
+  - run_id: run-022
+    config: ../experiments/vianli/exp-010.yaml
+    seed: 42
+  - run_id: run-025
+    config: ../experiments/vihsd/exp-011.yaml
+    seed: 42

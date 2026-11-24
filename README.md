@@ -5,6 +5,58 @@ MoE hiện dùng MLP expert hai lớp, linear scoring và top-k selection. LSTM/
 router mới chưa được triển khai. Phạm vi: [THESIS_SPECIFICATION](docs/THESIS_SPECIFICATION.md).
 Implementation: [ARCHITECTURE](docs/ARCHITECTURE.md). Bước tiếp theo: [PLAN](experiments/PLAN.md).
 
+Ưu tiên từ 2026-11-24 (D013): cố định **vinai/phobert-base**, kiểm chứng original trước
+khi thử các thiết kế MoE classifier. Các hướng screening multilingual bên dưới là hồ sơ
+trước quyết định này; không phải bước bắt buộc của kế hoạch hiện hành.
+
+## Chạy PhoBERT-base original
+
+Config mới: ViANLI `configs/experiments/vianli/exp-010.yaml`; ViHSD
+`configs/experiments/vihsd/exp-011.yaml`. Cả hai pin model/tokenizer cùng revision,
+fine-tune toàn bộ, 7 epoch, batch 16, lr 1e-5, seed 42, CE. Max length lần lượt
+256 (cả cặp premise/hypothesis) và 128. Đây là baseline phát triển, chưa phải finalist.
+
+Chuẩn bị/khôi phục `data/processed/vianli_segmented` và `data/processed/vihsd_segmented`
+trên máy chạy; loader không tự segment text gốc. Với checkout mới, chạy hai lệnh
+preprocessing trong mục Dữ liệu bên dưới (Java/VnCoreNLP và quyền truy cập HF cần thiết).
+Không ghi đè bản có sẵn. Bản local lịch sử còn giới hạn provenance theo `data/manifests/`.
+
+```bash
+# Smoke riêng, W&B tắt; CSV tự cấp ID mới trong cùng filesystem.
+python train.py --config configs/experiments/vianli/exp-010.yaml --smoke-test --set logging.use_wandb=false
+python train.py --config configs/experiments/vihsd/exp-011.yaml --smoke-test --set logging.use_wandb=false
+# Full chỉ sau smoke đạt và kiểm tra segmentation/truncation train/validation.
+python train.py --config configs/experiments/vianli/exp-010.yaml --no-smoke-test
+python train.py --config configs/experiments/vihsd/exp-011.yaml --no-smoke-test
+```
+
+Lệnh không có `--run-id` dùng allocator CSV đang bật; smoke/full nhận ID khác nhau.
+Trước khi chạy trên nhiều session, phải đối chiếu W&B/storage và chỉ định `--run-id run-NNN`
+còn trống cho từng run; allocator không đồng bộ giữa hai filesystem. Không sao chép ID
+cũ hoặc dùng `--set` đổi thành MoE dưới ID original.
+
+## Group PhoBERT giai đoạn 0–1
+
+Đã có config C1/C2/M0: ViANLI exp-012/013/014, ViHSD exp-015/016/017.
+C1 dùng một MLP expert H=512; C2 một expert H=2051 khớp tổng head parameters M0;
+M0 dùng 4 expert H=512, top-2, balance coefficient 0.01. Cả ba kế thừa dữ liệu,
+revision và budget original; không thay implementation model. Chi tiết ở [PLAN](experiments/PLAN.md).
+
+Ví dụ chạy ViANLI, từng bước sau khi bước trước đạt (ViHSD thay `vianli` bằng `vihsd`):
+
+```bash
+python scripts/run_group.py --group-config configs/groups/vianli_phobert_stage0_baseline.yaml --smoke-test
+python scripts/run_group.py --group-config configs/groups/vianli_phobert_stage0_baseline.yaml --no-smoke-test
+python scripts/run_group.py --group-config configs/groups/vianli_phobert_stage1_screening.yaml --smoke-test
+python scripts/run_group.py --group-config configs/groups/vianli_phobert_stage1_screening.yaml --no-smoke-test
+```
+
+Stage 0 baseline có seed 42/123/2026; stage 1 screening có C1/C2/M0 seed 42.
+Smoke dùng 1 epoch, 64 train/32 validation. Logging giữ theo config. Full dùng project kế thừa
+`cmoe_vianli`/`cmoe_vihsd`. Group giữ ID full khai báo trong YAML; mỗi ID dùng một lần;
+chỉ đối chiếu local, cần kiểm tra W&B/storage trước launch. Không dùng lại ID đã chạy;
+đổi group nếu trùng. Các group chạy tuần tự và chưa được chạy GPU trong tác vụ setup.
+
 ## Môi trường
 
 Python >=3.10, PyTorch >=2.6; cài dependency theo requirements. Java >=8 và VnCoreNLP
@@ -28,8 +80,8 @@ và pull request. CI kiểm tra notebook compile, cấu trúc config, artifact/t
 forward/backward, checkpoint, runner và overlap fixture; không tải model/dataset,
 không gọi W&B và không yêu cầu GPU.
 
-Xác nhận thực tế hai GPU T4 vẫn chạy thủ công bằng
-`notebooks/parallel_kaggle_smoke.ipynb` trên Kaggle. CI không thay thế live smoke GPU.
+Chạy GPU thủ công bằng các notebook Kaggle/Colab; CI không tải model/dữ liệu và không
+thay thế smoke hoặc full run thực tế.
 
 ## Dữ liệu
 
@@ -78,35 +130,35 @@ python evaluate.py --run-dir runs/<run_id> --finalist-config configs/finalists/<
 Evaluator kiểm tra config/seed/provenance, dựng model từ HF config đã lưu và nạp checkpoint;
 không tìm “latest run” và không dùng config nền hiện tại để dựng lại model.
 
-## Notebook kiểm tra hai run song song trên Kaggle T4 ×2
+## Notebook chạy baseline PhoBERT trên Kaggle/Colab
 
-Mở [parallel_kaggle_smoke.ipynb](notebooks/parallel_kaggle_smoke.ipynb). Đây là notebook
-riêng để xác nhận hai process chia sẻ một checkout/cache/tracker nhưng dùng hai GPU,
-model/optimizer và artifact riêng. Bật T4 x2, Internet và secrets HF_TOKEN/WANDB_API_KEY;
-push/upload code mới trước khi chạy.
+Các notebook [Kaggle](notebooks/main_kaggle.ipynb), [Colab](notebooks/main_colab.ipynb)
+và [Kaggle paired workflow](notebooks/parallel_kaggle_smoke.ipynb) đều chạy cặp D013:
+ViANLI exp-010 và ViHSD exp-011. Chỉ cần **một GPU**; hai config chạy tuần tự. Gắn hai
+DatasetDict segmented dưới thư mục nguồn mà cell `DATA_SOURCE_ROOT` khai báo, push/upload
+checkout mới, cài dependencies và thêm `WANDB_API_KEY` cho full run.
 
-1. Setup repo/dependency, secrets và kiểm tra hai GPU.
-2. Chạy test console/tracker offline, đăng ký run-016/017 rồi làm ấm cache model/dataset.
-3. Launch XLM-R (exp-003) trên GPU 0, mDeBERTa (exp-007) trên GPU 1. Cả hai là
-   diagnostic original-head, 2 epoch, 256 train/64 validation, batch 8, seed 42.
-4. Xem GPU memory/utilization và log mỗi 10 giây; chờ cả hai kết thúc.
-5. Cell xác nhận kiểm tra status, GPU mask, thời gian training chồng nhau, checkpoint,
-   metric hữu hạn, hai dòng CSV đúng metadata và W&B sync nếu bật. Lưu output; ZIP tùy chọn.
+Mỗi phase có hai cách tương đương: chạy hai lệnh `train.py` riêng hoặc chạy cặp qua
+`scripts/run_group.py`. Bỏ comment đúng một option; không chạy cả hai. Trước full run,
+smoke cần đạt cho cả hai dataset. Smoke dùng ID run-020/021, W&B tắt; full seed 42 dùng
+run-022/025. Group config tương ứng là
+`configs/groups/phobert_original_pair_baseline.yaml` và
+`configs/groups/phobert_original_pair_baseline.yaml`. Các group stage0 theo dataset chỉ
+còn seed 123/2026 để không lặp seed 42 đã được cặp notebook chạy.
 
-PASS chỉ được xác nhận khi chạy notebook thực tế. Notebook không đánh giá test set.
-Run-014/015 đã failed do lỗi Tee.isatty theo log Kaggle người dùng gửi; retry dùng
-run-016/017 sau khi cập nhật code. Cell setup không tự pull checkout đã tồn tại.
-Nếu ID đã dùng, đổi sang ID mới; không reset trạng thái để ghi đè. Nếu chưa có
-training overlap thì chưa xác nhận chạy song song, kể cả khi hai run hoàn tất riêng lẻ.
+Aggregate ghi `runs.csv`, `summary.csv` và `summary.md` dưới `RUNS_DIR/analysis`; tracker
+được copy vào output của phiên. Khi retry hoặc đổi storage/session, đối chiếu tracker,
+artifacts và W&B rồi dùng ID mới. Test set chỉ chạy qua cell `evaluate.py` sau khi finalist
+và seed đã khóa.
 
 CSV dùng OS-backed FileLock có chờ tối đa 30 giây; file .lock có thể còn sau khi nhả khóa,
 không xóa nó trong khi worker đang chạy. Lock này dùng cho cùng filesystem, không phải
 đồng bộ giữa hai session Kaggle độc lập. Group runner thường vẫn chạy tuần tự.
 Có thể tắt CSV bằng logging.use_tracker=false khi thật sự không cần, vẫn giữ W&B/artifact.
 
-## Screening XLM-R và mDeBERTa trên hai session Kaggle
+## Hồ sơ D010 — screening XLM-R và mDeBERTa trên hai session Kaggle
 
-Đợt hiện hành chạy **original head** trước: ViANLI có exp-003 (XLM-R), exp-007
+Đợt trước D013 chạy **original head** trước: ViANLI có exp-003 (XLM-R), exp-007
 (mDeBERTa); ViHSD có exp-008 (XLM-R), exp-009 (mDeBERTa). Tất cả seed 42, 7 epoch,
 batch 16, lr 1e-5; chỉ validation. Chi tiết ID và protocol ở [PLAN](experiments/PLAN.md).
 
@@ -125,7 +177,7 @@ Chạy từ Git root; trong Python cell Kaggle thêm `!` trước các lệnh d�
 **Session 1 — ViANLI:**
 
 ```bash
-python scripts/run_group.py --group-config configs/groups/vianli_multilingual_smoke.yaml --smoke-test
+python scripts/run_group.py --group-config configs/groups/vianli_multilingual_screening.yaml --smoke-test
 # Chạy full khi cả hai smoke đã hoàn tất, loss hữu hạn và có artifact:
 python scripts/run_group.py --group-config configs/groups/vianli_multilingual_screening.yaml --no-smoke-test
 ```
@@ -133,7 +185,7 @@ python scripts/run_group.py --group-config configs/groups/vianli_multilingual_sc
 **Session 2 — ViHSD:**
 
 ```bash
-python scripts/run_group.py --group-config configs/groups/vihsd_multilingual_smoke.yaml --smoke-test
+python scripts/run_group.py --group-config configs/groups/vihsd_multilingual_screening.yaml --smoke-test
 python scripts/run_group.py --group-config configs/groups/vihsd_multilingual_screening.yaml --no-smoke-test
 ```
 
@@ -157,12 +209,20 @@ Không chạy evaluate test hoặc khóa finalist ở bước screening. Nếu s
 
 ## Notebook và lịch sử
 
-[Colab](notebooks/main_colab.ipynb) và [Kaggle](notebooks/main_kaggle.ipynb) chỉ setup,
-chọn config, đặt output root và gọi entry point chung. Không chứa logic train/model riêng.
-Lưu toàn bộ thư mục run khi tải output hoặc kết thúc phiên GPU. Notebook clone nhánh được chọn ở biến `BRANCH`; cần push thay đổi hoặc upload
-checkout mới trước khi dùng trên cloud.
+[Colab](notebooks/main_colab.ipynb) và [Kaggle](notebooks/main_kaggle.ipynb) cấu hình dữ liệu/
+output, cung cấp lựa chọn train trực tiếp hoặc group, aggregate và lệnh evaluate có điều kiện.
+Không chứa logic model riêng. Notebook clone nhánh ở biến `BRANCH`; cần push thay đổi hoặc
+upload checkout mới trước khi dùng trên cloud. Lưu toàn bộ run directories và tracker khi
+tải output hoặc kết thúc phiên GPU.
 
 Lịch sử trước refactor: nhánh `refactor`, commit
 `c04f25d05d8802c8a32d26eb1d6a6b53e2781adf`. Transformer-MoE, Hybrid, NLIMoE, bản thảo và
 metric cũ nằm tại đó; repo hiện hành không nạp checkpoint/config cũ. Baseline Linear cũ
 khác head chuẩn mới nên metric cũ không được nhập vào bảng so sánh mới.
+
+Quy ước từ 2026-11-25: không tạo YAML riêng cho smoke. Dùng cùng config/group với
+`--smoke-test` hoặc `--no-smoke-test`; giới hạn lấy từ training.smoke trong base.
+Run ID dùng một lần: nếu chạy cùng group ở cả hai chế độ, cấp ID mới cho lượt sau.
+Smoke trực tiếp bằng train CLI có thể tự cấp ID khi CSV bật và không truyền --run-id.
+Logging giữ theo config; muốn tắt W&B dùng --set logging.use_wandb=false trên train CLI.
+Giữ danh sách seed hiện có trong group, không tự thêm seed đã chạy trở lại.
