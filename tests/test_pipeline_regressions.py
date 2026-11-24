@@ -15,6 +15,38 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 class TestPipelineRegressions(unittest.TestCase):
+    def test_vihsd_raw_and_filtered_split_sizes_are_checked_separately(self):
+        from datasets import Dataset, DatasetDict
+
+        raw = DatasetDict({
+            "train": Dataset.from_dict({
+                "free_text": ["first", None, "third"],
+                "label_id": [0, 1, 2],
+            }),
+            "validation": Dataset.from_dict({"free_text": ["valid"], "label_id": [0]}),
+            "test": Dataset.from_dict({"free_text": ["test"], "label_id": [1]}),
+        })
+        config = {
+            "input_mode": "single", "name": "uitnlp/vihsd", "tokenizer": "offline",
+            "text_column": "free_text", "label_column": "label_id",
+            "label_names": ["CLEAN", "OFFENSIVE", "HATE"], "max_length": 4,
+            "train_split": "train", "validation_split": "validation", "test_split": "test",
+            "batch_size": 2, "num_workers": 0,
+            "expected_split_sizes": {"train": 3, "validation": 1, "test": 1},
+            "filtered_split_sizes": {"train": 2, "validation": 1, "test": 1},
+        }
+        def tokenize(text_batch, **kwargs):
+            count = len(text_batch) if isinstance(text_batch, (list, tuple)) else 1
+            return {
+                "input_ids": [[1, 2, 3, 0]] * count,
+                "attention_mask": [[1, 1, 1, 0]] * count,
+            }
+
+        tokenizer = Mock(side_effect=tokenize)
+        with patch("src.data.loader._load_raw", return_value=raw):
+            with patch("src.data.loader.AutoTokenizer.from_pretrained", return_value=tokenizer):
+                prepare_data(config)
+
     def test_data_loader_keeps_optional_segment_ids(self):
         from datasets import Dataset, DatasetDict
 

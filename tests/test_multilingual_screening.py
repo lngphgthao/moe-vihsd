@@ -26,6 +26,9 @@ class TestMultilingualScreening(unittest.TestCase):
                 self.assertEqual(config['dataset']['tokenizer_revision'], config['model']['revision'])
                 self.assertEqual(config['dataset']['name'], 'uitnlp/ViANLI' if dataset == 'vianli' else 'uitnlp/vihsd')
                 self.assertIsNotNone(config['dataset']['revision'])
+                if dataset == 'vihsd':
+                    self.assertEqual(config['dataset']['expected_split_sizes']['train'], 24048)
+                    self.assertEqual(config['dataset']['filtered_split_sizes']['train'], 24046)
                 self.assertEqual(config['training']['loss_type'], 'cross_entropy')
                 current = (config['training']['epochs'], config['training']['batch_size'],
                            config['training']['learning_rate'], config['dataset']['max_length'])

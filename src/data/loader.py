@@ -141,6 +141,13 @@ def prepare_data(config: dict) -> DatasetBundle:
             if col not in train_columns:
                 raise KeyError(f"NLI column {col!r} not found in {train_columns}")
 
+    for split_name, expected_size in config.get("expected_split_sizes", {}).items():
+        if len(raw[split_name]) != expected_size:
+            raise ValueError(
+                f"Expected {expected_size} raw examples in '{split_name}', "
+                f"got {len(raw[split_name])}"
+            )
+
     # --- Lọc text bị thiếu ---
     if input_mode == "single":
         raw = raw.filter(
@@ -153,7 +160,8 @@ def prepare_data(config: dict) -> DatasetBundle:
             desc="Removing examples with missing premise/hypothesis",
         )
 
-    for split_name, expected_size in config.get("expected_split_sizes", {}).items():
+    filtered_sizes = config.get("filtered_split_sizes", config.get("expected_split_sizes", {}))
+    for split_name, expected_size in filtered_sizes.items():
         if len(raw[split_name]) != expected_size:
             raise ValueError(
                 f"Expected {expected_size} examples in '{split_name}' after filtering, "

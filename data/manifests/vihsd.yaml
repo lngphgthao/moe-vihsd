@@ -61,4 +61,12 @@ multilingual_screening:
   word_segmentation: false
   access: Accept the dataset conditions on Hugging Face and use HF_TOKEN from that account.
   checksum: null
+  raw_split_sizes:
+    train: 24048
+    validation: 2672
+    test: 6680
+  filtered_split_sizes:
+    train: 24046
+    validation: 2672
+    test: 6680
   verification: Raw Hub download not performed in this config setup; split sizes are checked at runtime.
