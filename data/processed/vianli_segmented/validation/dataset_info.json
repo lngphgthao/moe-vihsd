@@ -1,0 +1,70 @@
+{
+  "builder_name": "json",
+  "citation": "",
+  "config_name": "default",
+  "dataset_name": "vi_anli",
+  "dataset_size": 3198121,
+  "description": "",
+  "download_checksums": {
+    "hf://datasets/uitnlp/ViANLI@0fec8d6ecb043a61c609f9b51f80401fdf1e84d3/vianli_train.jsonl": {
+      "num_bytes": 2892868,
+      "checksum": null
+    },
+    "hf://datasets/uitnlp/ViANLI@0fec8d6ecb043a61c609f9b51f80401fdf1e84d3/vianli_dev.jsonl": {
+      "num_bytes": 364351,
+      "checksum": null
+    },
+    "hf://datasets/uitnlp/ViANLI@0fec8d6ecb043a61c609f9b51f80401fdf1e84d3/vianli_test.jsonl": {
+      "num_bytes": 364606,
+      "checksum": null
+    }
+  },
+  "download_size": 3621825,
+  "features": {
+    "uid": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "label": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "premise": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "hypothesis": {
+      "dtype": "string",
+      "_type": "Value"
+    }
+  },
+  "homepage": "",
+  "license": "",
+  "size_in_bytes": 6819946,
+  "splits": {
+    "train": {
+      "name": "train",
+      "num_bytes": 2553783,
+      "num_examples": 8012,
+      "dataset_name": "vi_anli"
+    },
+    "validation": {
+      "name": "validation",
+      "num_bytes": 322022,
+      "num_examples": 1000,
+      "dataset_name": "vi_anli"
+    },
+    "test": {
+      "name": "test",
+      "num_bytes": 322316,
+      "num_examples": 1000,
+      "dataset_name": "vi_anli"
+    }
+  },
+  "version": {
+    "version_str": "0.0.0",
+    "major": 0,
+    "minor": 0,
+    "patch": 0
+  }
+}
