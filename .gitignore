@@ -14,10 +14,8 @@ env/
 !.env.example
 # Runtime artifacts; manifests and research CSVs remain versioned
 /data/raw/
-/data/processed/
+!/data/processed/
 /data/cache/
-/data/vianli_segmented/
-/data/vihsd_segmented/
 /runs/
 /results/
 /checkpoints/
@@ -27,7 +25,6 @@ env/
 /vncorenlp/
 /.agent/
 /.refactor_*.py
-*.arrow
 *.parquet
 *.safetensors
 *.pt
