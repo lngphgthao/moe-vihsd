@@ -6,13 +6,54 @@ import tempfile
 import unittest
 from unittest.mock import patch
 import yaml
-from scripts.run_group import run_group
+from scripts.run_group import main, run_group
 from src.utils import load_config
 from src.utils.artifacts import reserve_run
 
 ROOT = Path(__file__).resolve().parents[1]
 
 class TestGroups(unittest.TestCase):
+    def test_cli_set_override_is_applied_and_forwarded_to_every_run(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            tracker = root / "tracker.csv"
+            run_root = root / "runs"
+            calls = []
+
+            def invoke_group(group_path, smoke_test, *, set_overrides):
+                return run_group(group_path, smoke_test, tracker=tracker, set_overrides=set_overrides)
+
+            group = load_config(ROOT / "configs/groups/vianli_screening.yaml")
+            for entry in group["runs"]:
+                entry["config"] = str((ROOT / "configs/groups" / entry["config"]).resolve())
+            group_path = root / "group.yaml"
+            group_path.write_text(yaml.safe_dump(group), encoding="utf-8")
+
+            with patch.dict(os.environ, {"RUNS_DIR": str(run_root)}):
+                with patch("scripts.run_group.run_group", side_effect=invoke_group):
+                    with patch("train.main", side_effect=lambda argv: calls.append(argv)):
+                        with patch(
+                            "scripts.run_group.reserve_run",
+                            wraps=reserve_run,
+                        ) as reserve:
+                            main([
+                                "--group-config", str(group_path),
+                                "--set", "logging.use_wandb=false",
+                            ])
+
+            self.assertEqual(len(calls), 2)
+            for argv in calls:
+                self.assertTrue(any(
+                    argv[index:index + 2] == ["--set", "logging.use_wandb=false"]
+                    for index in range(len(argv) - 1)
+                ))
+            self.assertTrue(all(
+                call.args[0]["logging"]["use_wandb"] is False
+                for call in reserve.call_args_list
+            ))
+            rows = list(csv.DictReader(tracker.read_text(encoding="utf-8").splitlines()))
+            self.assertEqual(len(rows), 2)
+
     def test_auto_group_skips_existing_artifacts_and_allocates_new_ids(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

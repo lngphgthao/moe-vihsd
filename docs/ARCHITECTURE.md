@@ -11,7 +11,9 @@ lần, kể cả khi đổi giữa smoke/full. Các mô tả file smoke ở mụ
 là lịch sử setup; không phải config hiện hành. Diagnostic tiny-overfit vẫn giữ riêng.
 
 Notebook baseline hiện tại dùng group `phobert_original_pair_baseline.yaml` cho cả
-hai chế độ; giữ workflow tuần tự người dùng đã cập nhật. Test config kiểm tra cùng
+hai chế độ qua group runtime có ID riêng cho smoke/full. Hai notebook main chạy
+tuần tự trên một GPU; parallel chạy hai process trên hai GPU, mỗi group một entry.
+Runner gốc vẫn tuần tự. Test config kiểm tra cùng
 overlay ở cả hai profile và giữ danh sách seed hiện có trong group baseline.
 
 Kiểm chứng đợt dọn: không còn YAML smoke; cú pháp YAML/Python, đường dẫn kế thừa/

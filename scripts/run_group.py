@@ -17,10 +17,11 @@ def _override_args(overrides):
             for key, value in overrides.items()]
 
 
-def run_group(group_path, smoke_test=None, *, tracker=TRACKER):
+def run_group(group_path, smoke_test=None, *, tracker=TRACKER, set_overrides=None):
     from train import main as train_main
     group_path = Path(group_path)
     group = load_config(group_path)
+    set_overrides = set_overrides or []
     planned = []
     ids = set()
     for entry in group.get("runs", []):
@@ -31,7 +32,7 @@ def run_group(group_path, smoke_test=None, *, tracker=TRACKER):
             ids.add(run_id)
         config_path = (group_path.parent / entry["config"]).resolve()
         overrides = {**group.get("overrides", {}), **entry.get("overrides", {}), "seed": entry["seed"]}
-        arguments = _override_args(overrides)
+        arguments = _override_args(overrides) + set_overrides
         config = apply_overrides(load_config(config_path), arguments)
         planned.append((config, config_path, run_id, arguments))
     if not planned:
@@ -77,9 +78,10 @@ def run_group(group_path, smoke_test=None, *, tracker=TRACKER):
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Execute a group of experiments with explicit run IDs.")
     parser.add_argument("--group-config", required=True)
+    parser.add_argument("--set", dest="overrides", action="append", default=[])
     parser.add_argument("--smoke-test", action=argparse.BooleanOptionalAction, default=None)
     args = parser.parse_args(argv)
-    run_group(args.group_config, args.smoke_test)
+    run_group(args.group_config, args.smoke_test, set_overrides=args.overrides)
 
 
 if __name__ == "__main__":

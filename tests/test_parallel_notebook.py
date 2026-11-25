@@ -2,6 +2,7 @@
 from copy import deepcopy
 import json
 from pathlib import Path
+import tempfile
 import unittest
 
 import yaml
@@ -66,9 +67,35 @@ class TestNotebookWorkflows(unittest.TestCase):
         source = "\n".join("".join(cell["source"]) for cell in notebook["cells"])
         self.assertIn("CUDA_VISIBLE_DEVICES=0", source)
         self.assertIn("CUDA_VISIBLE_DEVICES=1", source)
-        self.assertIn('wait "$first"', source)
-        self.assertIn('wait "$second"', source)
-        self.assertIn('[ "$a" -eq 0 ] && [ "$b" -eq 0 ]', source)
+        self.assertIn('wait "$first_pid"', source)
+        self.assertIn('wait "$second_pid"', source)
+        self.assertIn('[ "$first_status" -eq 0 ] && [ "$second_status" -eq 0 ]', source)
+
+    def test_runtime_groups_keep_smoke_ids_and_logging_separate_from_full(self):
+        for path in NOTEBOOKS:
+            with self.subTest(notebook=path.name), tempfile.TemporaryDirectory() as directory:
+                namespace = {"REPO_DIR": ROOT, "OUTPUT_DIR": Path(directory)}
+                cell = next(cell for cell in load_notebook(path)["cells"]
+                            if "".join(cell["source"]).startswith("from copy import deepcopy"))
+                exec("".join(cell["source"]), namespace)
+                smoke_entries, full_entries = [], []
+                for group_path in Path(directory).glob("*.yaml"):
+                    group = load_config(group_path)
+                    smoke = "smoke" in group_path.name
+                    target = smoke_entries if smoke else full_entries
+                    for entry in group["runs"]:
+                        config = load_config(entry["config"])
+                        config = apply_overrides(config, [
+                            f"{key}={str(value).lower()}"
+                            for key, value in group.get("overrides", {}).items()
+                        ])
+                        self.assertEqual(config["logging"]["use_wandb"], not smoke)
+                        self.assertTrue(config["logging"]["use_tracker"])
+                        self.assertEqual(entry["seed"], 42)
+                        target.append((config["experiment_id"], entry["run_id"]))
+                self.assertEqual(sorted(smoke_entries), [("exp-010", "run-020"), ("exp-011", "run-021")])
+                if path.name.startswith("parallel_"):
+                    self.assertEqual(sorted(full_entries), [("exp-010", "run-022"), ("exp-011", "run-025")])
 
     def test_pair_groups_resolve_to_the_two_phobert_original_configs(self):
         for filename, (smoke, wandb_enabled, run_ids) in PAIR_GROUPS.items():

@@ -100,14 +100,16 @@ Mỗi dataset có hai group tại `configs/groups/<dataset>_phobert_<tên>.yaml`
 | stage0_baseline | run-023..024 | run-026..027 | Original full, seed 123/2026 |
 | stage1_screening | run-034..036 | run-037..039 | C1/C2/M0 full, seed 42 |
 
-Hai notebook Kaggle/Colab có cặp group để chạy O cùng lúc theo quy trình tuần tự:
-`phobert_original_pair_baseline.yaml` dùng run-020/021; `phobert_original_pair_baseline.yaml`
-dùng seed 42, run-022/025. Đây là cách thay thế cho hai group stage0 theo dataset tương ứng,
-không chạy song song với chúng hoặc chạy lại cùng ID. Direct `train.py` trong notebook
-dùng chính các ID đó.
+Hai notebook main Kaggle/Colab chạy O tuần tự trên một GPU; notebook parallel chạy
+hai config đồng thời trên hai GPU riêng. Group chính `phobert_original_pair_baseline.yaml`
+dùng seed 42, run-022/025 cho full. Cell chuẩn bị notebook tạo group runtime từ group
+chính, cấp run-020/021 và tắt W&B cho smoke. Parallel tách thành hai group một entry
+để gọi hai runner đồng thời; runner gốc vẫn tuần tự. Direct `train.py` dùng cùng ID.
+Không chạy lại baseline seed 42 qua option còn lại hoặc dùng lại cùng ID.
 
-Smoke dùng cùng config/group chính với `--smoke-test`; full dùng `--no-smoke-test`.
-Group chạy tuần tự trên một GPU; không tự dùng GPU thứ hai. Kế thừa project người dùng đã đặt:
+Smoke/full dùng cùng config nghiên cứu, lần lượt `--smoke-test`/`--no-smoke-test`.
+Không gọi smoke trực tiếp bằng group có ID dành cho full; chọn option smoke notebook.
+Kế thừa project người dùng đã đặt:
 `cmoe_vianli`/`cmoe_vihsd`; không di chuyển run cũ, không thay budget khoa học.
 ID trên mới đối chiếu checkout local, chưa đặt chỗ CSV hoặc kiểm tra W&B/storage
 từ xa. Phải đối chiếu trước launch; nếu ID đã dùng thì sửa group sang ID mới.
@@ -117,7 +119,7 @@ Nếu đã có baseline full đúng fingerprint/seed/provenance, chỉ chạy c�
 Lần lượt chạy cặp O rồi các seed xác nhận bổ sung (ví dụ):
 
 ```bash
-python scripts/run_group.py --group-config configs/groups/phobert_original_pair_baseline.yaml --smoke-test
+# Smoke: chọn đúng một option trong notebook (ID riêng, W&B tắt).
 python scripts/run_group.py --group-config configs/groups/phobert_original_pair_baseline.yaml --no-smoke-test
 python scripts/run_group.py --group-config configs/groups/vianli_phobert_stage0_baseline.yaml --no-smoke-test
 python scripts/run_group.py --group-config configs/groups/vianli_phobert_stage1_screening.yaml --smoke-test

@@ -105,6 +105,7 @@ Script từ chối ghi đè dataset đã tồn tại. Máy hiện tại đã gi�
 python train.py --config configs/experiments/vianli/exp-003.yaml --run-id run-010 --smoke-test
 python train.py --config configs/experiments/vianli/exp-004.yaml --run-id run-004 --no-smoke-test
 python scripts/run_group.py --group-config configs/groups/vianli_screening.yaml --no-smoke-test
+python scripts/run_group.py --group-config configs/groups/vianli_screening.yaml --no-smoke-test --set logging.use_wandb=false
 python scripts/aggregate_results.py --runs-dir runs --output-dir runs/analysis
 ```
 
@@ -112,8 +113,10 @@ Tracker CSV đã bật lại: `logging.use_tracker: true` là mặc định. Tra
 ID tiếp theo từ CSV, hoặc dùng --run-id; group có ID cụ thể. Run ID dùng một lần,
 retry cấp ID mới; kiểm tra trùng trên W&B/ổ lưu trữ khi phân phối nhiều máy.
 Screening dùng seed 42; seed cuối chưa khóa.
-`--set training.head_learning_rate=0.0001` và các override khác chỉ nhận key có trong
-resolved config. Đổi cấu hình nghiên cứu đã chạy cần experiment ID mới.
+`--set` có thể lặp lại và nhận key có trong resolved config; trên group, giá trị CLI
+ghi đè override YAML cho mọi run. Ví dụ trên tắt W&B nhưng vẫn giữ CSV tracker bật;
+hai tracker được điều khiển độc lập qua `logging.use_wandb` và `logging.use_tracker`.
+Đổi cấu hình nghiên cứu đã chạy cần experiment ID mới.
 
 `runs/<run_id>/` giữ manifest, config, labels, native HF config, metrics JSONL, summary,
 console, checkpoint và diagnostics. W&B và artifact local cùng liên kết run ID. Đặt `RUNS_DIR`
@@ -133,18 +136,21 @@ không tìm “latest run” và không dùng config nền hiện tại để d�
 ## Notebook chạy baseline PhoBERT trên Kaggle/Colab
 
 Các notebook [Kaggle](notebooks/main_kaggle.ipynb), [Colab](notebooks/main_colab.ipynb)
-và [Kaggle paired workflow](notebooks/parallel_kaggle_smoke.ipynb) đều chạy cặp D013:
-ViANLI exp-010 và ViHSD exp-011. Chỉ cần **một GPU**; hai config chạy tuần tự. Gắn hai
-DatasetDict segmented dưới thư mục nguồn mà cell `DATA_SOURCE_ROOT` khai báo, push/upload
-checkout mới, cài dependencies và thêm `WANDB_API_KEY` cho full run.
+và [Kaggle song song](notebooks/parallel_kaggle_smoke.ipynb) đều chạy cặp D013:
+ViANLI exp-010 và ViHSD exp-011. Hai notebook main chạy tuần tự trên **một GPU**;
+notebook parallel chạy đồng thời hai process trên **hai GPU T4**, mỗi config một GPU.
+Gắn hai DatasetDict segmented dưới `DATA_SOURCE_ROOT`, push/upload checkout mới,
+cài dependencies và thêm `WANDB_API_KEY` cho full run.
 
-Mỗi phase có hai cách tương đương: chạy hai lệnh `train.py` riêng hoặc chạy cặp qua
-`scripts/run_group.py`. Bỏ comment đúng một option; không chạy cả hai. Trước full run,
-smoke cần đạt cho cả hai dataset. Smoke dùng ID run-020/021, W&B tắt; full seed 42 dùng
-run-022/025. Group config tương ứng là
-`configs/groups/phobert_original_pair_baseline.yaml` và
-`configs/groups/phobert_original_pair_baseline.yaml`. Các group stage0 theo dataset chỉ
-còn seed 123/2026 để không lặp seed 42 đã được cặp notebook chạy.
+Mỗi phase có hai option: hai `train.py` hoặc `run_group`. Bỏ comment đúng một option
+kèm assert; giữ option còn lại comment. Trước full, smoke của cả hai config phải đạt.
+Smoke dùng run-020/021, W&B tắt; full seed 42 dùng run-022/025 theo
+`configs/groups/phobert_original_pair_baseline.yaml`. Cell chuẩn bị tạo group runtime
+dưới output từ group chính, dùng ID smoke riêng và W&B tắt; không giữ YAML smoke trong Git.
+Notebook parallel tách mỗi group runtime thành một entry, gọi hai runner đồng thời,
+chờ cả hai và báo lỗi nếu một process thất bại. Runner gốc vẫn xử lý entry tuần tự.
+Nếu ID đã dùng, sửa group chính/ID smoke và các lệnh trực tiếp tương ứng trước launch.
+Các group stage0 theo dataset chỉ còn seed 123/2026 để không lặp seed 42.
 
 Aggregate ghi `runs.csv`, `summary.csv` và `summary.md` dưới `RUNS_DIR/analysis`; tracker
 được copy vào output của phiên. Khi retry hoặc đổi storage/session, đối chiếu tracker,
