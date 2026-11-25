@@ -45,17 +45,19 @@ revision và budget original; không thay implementation model. Chi tiết ở [
 Ví dụ chạy ViANLI, từng bước sau khi bước trước đạt (ViHSD thay `vianli` bằng `vihsd`):
 
 ```bash
-python scripts/run_group.py --group-config configs/groups/vianli_phobert_stage0_baseline.yaml --smoke-test
-python scripts/run_group.py --group-config configs/groups/vianli_phobert_stage0_baseline.yaml --no-smoke-test
-python scripts/run_group.py --group-config configs/groups/vianli_phobert_stage1_screening.yaml --smoke-test
-python scripts/run_group.py --group-config configs/groups/vianli_phobert_stage1_screening.yaml --no-smoke-test
+python scripts/run_group.py --group-config configs/groups/vianli_phobert_stage0_baseline.yaml --smoke-test --auto-run-ids
+python scripts/run_group.py --group-config configs/groups/vianli_phobert_stage0_baseline.yaml --no-smoke-test --auto-run-ids
+python scripts/run_group.py --group-config configs/groups/vianli_phobert_stage1_screening.yaml --smoke-test --auto-run-ids
+python scripts/run_group.py --group-config configs/groups/vianli_phobert_stage1_screening.yaml --no-smoke-test --auto-run-ids
 ```
 
 Stage 0 baseline có seed 42/123/2026; stage 1 screening có C1/C2/M0 seed 42.
 Smoke dùng 1 epoch, 64 train/32 validation. Logging giữ theo config. Full dùng project kế thừa
-`cmoe_vianli`/`cmoe_vihsd`. Group giữ ID full khai báo trong YAML; mỗi ID dùng một lần;
-chỉ đối chiếu local, cần kiểm tra W&B/storage trước launch. Không dùng lại ID đã chạy;
-đổi group nếu trùng. Các group chạy tuần tự và chưa được chạy GPU trong tác vụ setup.
+`cmoe_vianli`/`cmoe_vihsd`. `--auto-run-ids` cấp ID mới từ tracker/artifact hiện tại cho
+mỗi lần gọi, nên smoke và full không dùng chung ID; YAML group vẫn giữ nguyên ID khai báo.
+Chỉ dùng chế độ này khi các run dùng chung filesystem/tracker. Nếu chạy ở nhiều session
+độc lập, hãy chọn ID riêng đã đối chiếu W&B/storage cho từng session. Các group chạy tuần tự
+và chưa được chạy GPU trong tác vụ setup.
 
 ## Môi trường
 
@@ -104,8 +106,8 @@ Script từ chối ghi đè dataset đã tồn tại. Máy hiện tại đã gi�
 ```bash
 python train.py --config configs/experiments/vianli/exp-003.yaml --run-id run-010 --smoke-test
 python train.py --config configs/experiments/vianli/exp-004.yaml --run-id run-004 --no-smoke-test
-python scripts/run_group.py --group-config configs/groups/vianli_screening.yaml --no-smoke-test
-python scripts/run_group.py --group-config configs/groups/vianli_screening.yaml --no-smoke-test --set logging.use_wandb=false
+python scripts/run_group.py --group-config configs/groups/vianli_screening.yaml --no-smoke-test --auto-run-ids
+python scripts/run_group.py --group-config configs/groups/vianli_screening.yaml --no-smoke-test --set logging.use_wandb=false --auto-run-ids
 python scripts/aggregate_results.py --runs-dir runs --output-dir runs/analysis
 ```
 
@@ -116,7 +118,9 @@ Screening dùng seed 42; seed cuối chưa khóa.
 `--set` có thể lặp lại và nhận key có trong resolved config; trên group, giá trị CLI
 ghi đè override YAML cho mọi run. Ví dụ trên tắt W&B nhưng vẫn giữ CSV tracker bật;
 hai tracker được điều khiển độc lập qua `logging.use_wandb` và `logging.use_tracker`.
-Đổi cấu hình nghiên cứu đã chạy cần experiment ID mới.
+`--auto-run-ids` bỏ qua ID khai báo trong YAML và cấp ID mới từ tracker cùng thư mục
+artifact; cần giữ CSV tracker bật và dùng chung filesystem. Với nhiều session độc lập,
+dùng ID tường minh đã đối chiếu thay vì auto. Đổi cấu hình nghiên cứu đã chạy cần experiment ID mới.
 
 `runs/<run_id>/` giữ manifest, config, labels, native HF config, metrics JSONL, summary,
 console, checkpoint và diagnostics. W&B và artifact local cùng liên kết run ID. Đặt `RUNS_DIR`
@@ -146,7 +150,8 @@ Mỗi phase có hai option: hai `train.py` hoặc `run_group`. Bỏ comment đú
 kèm assert; giữ option còn lại comment. Trước full, smoke của cả hai config phải đạt.
 Smoke dùng run-020/021, W&B tắt; full seed 42 dùng run-022/025 theo
 `configs/groups/phobert_original_pair_baseline.yaml`. Cell chuẩn bị tạo group runtime
-dưới output từ group chính, dùng ID smoke riêng và W&B tắt; không giữ YAML smoke trong Git.
+dưới output từ group chính. Nếu chọn option `run_group`, `--auto-run-ids` cấp ID khác
+cho smoke và full trên cùng filesystem; không giữ YAML runtime trong Git.
 Notebook parallel tách mỗi group runtime thành một entry, gọi hai runner đồng thời,
 chờ cả hai và báo lỗi nếu một process thất bại. Runner gốc vẫn xử lý entry tuần tự.
 Nếu ID đã dùng, sửa group chính/ID smoke và các lệnh trực tiếp tương ứng trước launch.
@@ -196,7 +201,9 @@ python scripts/run_group.py --group-config configs/groups/vihsd_multilingual_scr
 ```
 
 Smoke dùng run-010/011 ở session 1 và run-012/013 ở session 2; full dùng run-003/007
-và run-008/009, nên không đụng ID giữa hai session hoặc giữa smoke/full. Không dùng
+và run-008/009, nên không đụng ID giữa hai session hoặc giữa smoke/full. Các lệnh
+hai-session này dùng ID tường minh; không thêm `--auto-run-ids` vì tracker của mỗi
+session không đồng bộ. Không dùng
 `--smoke-test` với group full, vì sẽ tiêu thụ ID đã dành cho full. ID chỉ dùng một lần;
 retry phải cấp và đăng ký ID mới trước khi chạy.
 

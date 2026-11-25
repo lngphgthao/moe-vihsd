@@ -20,8 +20,14 @@ class TestGroups(unittest.TestCase):
             run_root = root / "runs"
             calls = []
 
-            def invoke_group(group_path, smoke_test, *, set_overrides):
-                return run_group(group_path, smoke_test, tracker=tracker, set_overrides=set_overrides)
+            def invoke_group(group_path, smoke_test, *, set_overrides, auto_run_ids):
+                return run_group(
+                    group_path,
+                    smoke_test,
+                    tracker=tracker,
+                    set_overrides=set_overrides,
+                    auto_run_ids=auto_run_ids,
+                )
 
             group = load_config(ROOT / "configs/groups/vianli_screening.yaml")
             for entry in group["runs"]:
@@ -39,6 +45,7 @@ class TestGroups(unittest.TestCase):
                             main([
                                 "--group-config", str(group_path),
                                 "--set", "logging.use_wandb=false",
+                                "--auto-run-ids",
                             ])
 
             self.assertEqual(len(calls), 2)
@@ -51,6 +58,7 @@ class TestGroups(unittest.TestCase):
                 call.args[0]["logging"]["use_wandb"] is False
                 for call in reserve.call_args_list
             ))
+            self.assertTrue(all(call.args[1] == "auto" for call in reserve.call_args_list))
             rows = list(csv.DictReader(tracker.read_text(encoding="utf-8").splitlines()))
             self.assertEqual(len(rows), 2)
 
@@ -67,13 +75,26 @@ class TestGroups(unittest.TestCase):
                 with patch("train.main", side_effect=train):
                     group = load_config(ROOT / "configs/groups/vianli_multilingual_screening.yaml")
                     for entry in group['runs']:
-                        entry['run_id'] = 'auto'
                         entry['config'] = str((ROOT / 'configs/groups' / entry['config']).resolve())
                     group_path = root / 'auto_group.yaml'
                     group_path.write_text(yaml.safe_dump(group), encoding='utf-8')
-                    run_group(group_path, True, tracker=tracker)
+                    run_group(group_path, True, tracker=tracker, auto_run_ids=True)
             run_ids = [argv[argv.index("--run-id") + 1] for argv in calls]
             self.assertEqual(run_ids, ["run-011", "run-012"])
+
+    def test_auto_run_ids_requires_tracker_enabled(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            tracker = root / "tracker.csv"
+            group = load_config(ROOT / "configs/groups/vianli_screening.yaml")
+            group["overrides"] = {"logging.use_tracker": False}
+            for entry in group["runs"]:
+                entry["config"] = str((ROOT / "configs/groups" / entry["config"]).resolve())
+            group_path = root / "group.yaml"
+            group_path.write_text(yaml.safe_dump(group), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "--auto-run-ids requires logging.use_tracker=true"):
+                run_group(group_path, True, tracker=tracker, auto_run_ids=True)
+            self.assertFalse(tracker.exists())
 
     def test_explicit_group_rejects_existing_artifact(self):
         with tempfile.TemporaryDirectory() as directory:

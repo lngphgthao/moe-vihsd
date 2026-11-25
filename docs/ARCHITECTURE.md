@@ -10,6 +10,11 @@ giữ giới hạn diagnostic. Cờ chỉ chọn profile, không tự tắt W&B.
 lần, kể cả khi đổi giữa smoke/full. Các mô tả file smoke ở mục kiểm chứng trước đây
 là lịch sử setup; không phải config hiện hành. Diagnostic tiny-overfit vẫn giữ riêng.
 
+Với group chạy nhiều profile trên cùng filesystem, `run_group.py --auto-run-ids`
+bỏ qua các ID khai báo trong YAML và cấp ID mới theo CSV tracker/artifact. Đây là
+opt-in; group YAML giữ nguyên ID. CSV tracker phải bật. Các session/filesystem độc lập
+vẫn cần ID tường minh được đối chiếu chung trên W&B/storage.
+
 Notebook baseline hiện tại dùng group `phobert_original_pair_baseline.yaml` cho cả
 hai chế độ qua group runtime có ID riêng cho smoke/full. Hai notebook main chạy
 tuần tự trên một GPU; parallel chạy hai process trên hai GPU, mỗi group một entry.

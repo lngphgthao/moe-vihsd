@@ -16,9 +16,11 @@ Xem bảng experiment và các gate tại experiments/PLAN.md.
 
 Base chứa mặc định; experiments chứa overlay có ID; groups khai báo từng config, seed,
 run_id; diagnostics chứa mục đích và giới hạn mẫu. Dùng base_config tương đối theo file.
-Trong group smoke tái chạy, dùng `run_id: auto` để quét tracker và thư mục artifact,
-từ đó cấp ID kế tiếp còn trống thay vì ghi đè. Với full/repro cần giữ `run_id` cụ thể
-để cố định provenance; group cố ý trùng artifact của run explicit sẽ dừng với lỗi.
+Khi cần chạy lại group ở nhiều profile trên cùng filesystem, truyền `--auto-run-ids`:
+runner bỏ qua ID trong YAML và cấp ID mới từ tracker/artifact cho từng run; YAML gốc
+không bị sửa. Cờ này cần CSV tracker bật. Với nhiều session/filesystem độc lập, giữ
+ID tường minh đã đối chiếu W&B/storage vì allocator cục bộ không đồng bộ giữa máy.
+Group chạy với ID tường minh trùng artifact sẽ dừng thay vì ghi đè.
 Model chỉ nhận backbone/revision/freeze_backbone và head.type original hoặc moe.
 MoE tách router.scoring=linear, router.selection=top_k, router.top_k khỏi expert settings.
 Trainer nhận routing.balance_loss_coef; head trả balance_loss thô.
