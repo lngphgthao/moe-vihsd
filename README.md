@@ -9,6 +9,39 @@ Implementation: [ARCHITECTURE](docs/ARCHITECTURE.md). Bước tiếp theo: [PLAN
 khi thử các thiết kế MoE classifier. Các hướng screening multilingual bên dưới là hồ sơ
 trước quyết định này; không phải bước bắt buộc của kế hoạch hiện hành.
 
+## Tối ưu MoE head với encoder frozen — ưu tiên từ 2026-11-26
+
+Theo D015, đợt tiếp theo chỉ train router/experts/classifier, freeze weights encoder
+pretrained PhoBERT-base. Config mới: ViANLI exp-018/019/020; ViHSD exp-021/022/023,
+LR head/router lần lượt 1e-4/3e-4/1e-3, 50 epoch, seed 42. Đánh giá mỗi epoch và
+nạp lại checkpoint có validation macro F1 cao nhất. Freeze giữ dropout encoder
+theo train/eval hiện hành; không nạp encoder fine-tuned stage 0. Chi tiết: PLAN/D015.
+
+Ví dụ ViANLI (ViHSD thay `vianli` bằng `vihsd`):
+
+```bash
+python scripts/run_group.py --group-config configs/groups/vianli_phobert_frozen_head_lr.yaml --smoke-test --auto-run-ids --set logging.use_wandb=false
+# Chỉ sau smoke đạt, đối chiếu run ID trên W&B/storage và bảo đảm chung filesystem/tracker:
+python scripts/run_group.py --group-config configs/groups/vianli_phobert_frozen_head_lr.yaml --no-smoke-test
+```
+
+Baseline original frozen (D016): ViANLI exp-024/025/026, ViHSD exp-027/028/029,
+LR classifier lần lượt 1e-4/3e-4/1e-3, cùng 50 epoch/seed 42/batch 16 và encoder
+pretrained frozen. Dùng các lệnh trên với group
+`configs/groups/<dataset>_phobert_frozen_original_lr.yaml` để smoke rồi full.
+Chọn LR tốt riêng cho mỗi loại head bằng validation macro F1. MoE hiện thử LR
+chung cho head/router, chưa search độc lập hai LR.
+
+Tracker hiện hành đăng ký 12 full run planned (MoE run-046..051, original
+run-052..057). Smoke auto nhận ID
+mới; full dùng ID planned trong group, retry cấp ID mới. Hồ sơ tracker cũ được giữ
+nguyên tại `experiments/archive/experiment_tracker_2026-11-26.csv`; không tái sử dụng
+ID lịch sử. Allocator không đọc archive, cần đối chiếu archive khi cấp ID tường minh.
+
+Chưa chạy các config mới trên GPU. 50 epoch là budget screening, chưa bảo đảm hội tụ
+hoặc F1 tăng. Chọn bằng validation; test chỉ sau khóa finalist. Các mục full fine-tuning
+giai đoạn 0–1 bên dưới giữ để đối chiếu, không đổi config đã chạy.
+
 ## Chạy PhoBERT-base original
 
 Config mới: ViANLI `configs/experiments/vianli/exp-010.yaml`; ViHSD

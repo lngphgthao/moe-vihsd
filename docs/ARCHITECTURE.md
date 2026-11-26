@@ -2,6 +2,32 @@
 
 Cập nhật sau refactor ngày 2026-11-22. Chỉ có dense encoder và hai loại head.
 
+## Frozen-head screening — 2026-11-26, D015
+
+Theo D016, bổ sung baseline original frozen exp-024..029 và hai group
+`<dataset>_phobert_frozen_original_lr.yaml`. Tái dùng OriginalClassifier: freeze
+model.base_model, giữ native HF classification head trainable; không có router.
+LR classifier 1e-4/3e-4/1e-3 với cùng 50 epoch/seed 42/batch 16 như MoE.
+Không đổi implementation hoặc chính sách dropout. Tracker thêm planned run-052..057.
+Kiểm chứng D016: resolve inheritance YAML của 6 baseline, đối chiếu head original,
+freeze/revision/data/budget/LR/smoke với MoE và bảo toàn 6 dòng tracker cũ đều đạt.
+Kiểm tra forward/backward riêng bị dừng do tiến trình không trả output; không ghi
+nhận là đạt. Chưa chạy GPU, pretrained full run hoặc đối chiếu W&B từ xa.
+
+Thêm exp-018..023 và hai group `<dataset>_phobert_frozen_head_lr.yaml`; tái dùng
+freeze_backbone và optimizer groups hiện hành, không đổi source implementation.
+Encoder pretrained không nhận gradient, optimizer chỉ chứa head/router. Freeze
+không ép encoder eval: dropout encoder vẫn theo model.train()/eval(). Train 50
+epoch, validation mỗi epoch và nạp lại best checkpoint bằng macro F1 sẵn có.
+
+Kiểm chứng CPU/offline: cả 6 config resolve/validate đúng, giữ M0/data/revision,
+LR và epoch đúng từng config, smoke còn 1 epoch/64 train/32 validation. Suite chạy
+52 test; các test head frozen/backward, optimizer, group và best checkpoint đạt.
+Toàn suite chưa đạt: failures=2, errors=6 trong test_parallel_notebook do thiếu
+parallel_kaggle_smoke.ipynb, thiếu cell được test tìm bằng prefix và CUDA mask
+không khớp notebook hiện tại. Không sửa notebook/test ngoài phạm vi trong đợt này.
+Diff check đạt. Chưa chạy smoke GPU/full run hoặc đối chiếu W&B/storage từ xa.
+
 ## Smoke qua CLI — 2026-11-25
 
 Theo yêu cầu người dùng, không giữ YAML dành riêng cho smoke. Experiment và group

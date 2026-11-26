@@ -1,0 +1,10 @@
+# Frozen encoder: chỉ train MoE head; screening bằng validation macro F1.
+base_config: exp-014.yaml
+experiment_id: exp-018
+model:
+  freeze_backbone: true
+training:
+  epochs: 50
+  learning_rate: 1.0e-04
+  head_learning_rate: 1.0e-04
+  router_learning_rate: 1.0e-04

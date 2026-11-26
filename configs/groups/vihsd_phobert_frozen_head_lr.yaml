@@ -1,0 +1,11 @@
+# ID full đã đăng ký planned local; trước launch đối chiếu W&B/storage. Smoke/retry dùng ID mới.
+runs:
+  - run_id: run-049
+    config: ../experiments/vihsd/exp-021.yaml
+    seed: 42
+  - run_id: run-050
+    config: ../experiments/vihsd/exp-022.yaml
+    seed: 42
+  - run_id: run-051
+    config: ../experiments/vihsd/exp-023.yaml
+    seed: 42

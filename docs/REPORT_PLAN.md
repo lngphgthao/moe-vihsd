@@ -41,6 +41,13 @@ phần tương ứng được giữ trong dàn ý, chưa coi là slide kết qu�
 
 ## 3. Dàn ý thuyết trình gồm 15 slide
 
+Bản Beamer tại `slides/main.tex` đã thêm mục lục, “Động lực nghiên cứu” và
+“Nghiên cứu liên quan”. Phần giới thiệu dẫn PhoBERT (2020), Sparsely-Gated MoE
+(2017) và Switch Transformers (2022), nối nền tảng biểu diễn tiếng Việt và xử lý
+có điều kiện với câu hỏi khảo sát MoE tại head. Các bài làm cơ sở định hướng,
+chưa chứng minh tính mới hoặc hiệu quả của phương pháp trong đề tài.
+Bảng dưới giữ dàn ý ban đầu; số trang/thời lượng source hiện hành xem `slides/README.md`.
+
 | Slide | Ý chính và nội dung cần có | Hình hoặc minh họa | Thời gian |
 |---|---|---|---:|
 | 1 | **Đề tài khảo sát MoE tại head của PhoBERT-base.** Tên đề tài, sinh viên, giảng viên, mục tiêu buổi báo cáo. | Sơ đồ một dòng encoder → head → nhãn | 0:30 |

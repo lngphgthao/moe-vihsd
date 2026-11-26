@@ -1,0 +1,6 @@
+# Original HF frozen; chỉ đổi classifier LR so với exp-027.
+base_config: exp-027.yaml
+experiment_id: exp-028
+training:
+  learning_rate: 3.0e-04
+  head_learning_rate: 3.0e-04

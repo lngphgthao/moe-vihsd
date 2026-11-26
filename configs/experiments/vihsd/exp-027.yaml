@@ -1,0 +1,12 @@
+# Original HF frozen; cùng budget và phạm vi LR với MoE frozen.
+base_config: exp-011.yaml
+experiment_id: exp-027
+model:
+  freeze_backbone: true
+training:
+  epochs: 50
+  learning_rate: 1.0e-04
+  head_learning_rate: 1.0e-04
+  router_learning_rate: null
+routing:
+  balance_loss_coef: 0.0

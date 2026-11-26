@@ -1,0 +1,11 @@
+# ID full planned local; đối chiếu W&B/storage trước launch. Smoke/retry dùng ID mới.
+runs:
+  - run_id: run-052
+    config: ../experiments/vianli/exp-024.yaml
+    seed: 42
+  - run_id: run-053
+    config: ../experiments/vianli/exp-025.yaml
+    seed: 42
+  - run_id: run-054
+    config: ../experiments/vianli/exp-026.yaml
+    seed: 42

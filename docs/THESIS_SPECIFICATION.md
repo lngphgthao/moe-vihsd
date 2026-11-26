@@ -30,9 +30,17 @@ Transformer-MoE, Hybrid và NLIMoE không thuộc pipeline hiện hành.
 
 ## Protocol
 
+- Ưu tiên từ 2026-11-26 (D015): phát triển router/MoE head với encoder pretrained
+  frozen, train tối đa 50 epoch và chọn checkpoint theo validation macro F1.
+  Đây là protocol mới, khác full fine-tuning giai đoạn 0–1. Các phép so sánh cô lập
+  routing trong đợt này phải cùng encoder frozen và budget; kết quả cũ chỉ làm mốc
+  hệ thống. Không cam kết F1 tăng khi freeze hoặc tăng epoch.
 - Original dùng AutoModelForSequenceClassification, giữ head chuẩn theo backbone.
   MoE dùng AutoModel, CLS hoặc masked mean pooling và expert MLP hai lớp.
-- Cùng backbone, revision, preprocessing, split, seed và training budget khi so sánh.
+  Theo D016, original frozen là đối chứng trực tiếp cho MoE frozen: cùng pretrained
+  encoder/freeze policy và budget, tune classifier LR riêng với cùng phạm vi và
+  số lần thử như LR chung head/router của MoE.
+- Cùng backbone, revision, preprocessing, split, seed, freeze policy và training budget khi so sánh.
   Công khai khác biệt pooling, dropout, capacity và tham số trainable giữa hai head.
 - Validation macro F1 dùng chọn checkpoint và phát triển cấu hình. Test chỉ dùng sau
   khóa config finalist, baseline đối chứng, seed và statistical protocol.

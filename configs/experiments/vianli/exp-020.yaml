@@ -1,0 +1,7 @@
+# Frozen encoder, cùng budget; chỉ đổi LR head/router so với exp-018.
+base_config: exp-018.yaml
+experiment_id: exp-020
+training:
+  learning_rate: 1.0e-03
+  head_learning_rate: 1.0e-03
+  router_learning_rate: 1.0e-03

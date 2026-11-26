@@ -1,5 +1,42 @@
 # Quyết định hiện hành
 
+## D016 — 2026-11-26: original frozen làm baseline cho MoE frozen
+
+Theo yêu cầu người dùng, thêm exp-024/025/026 (ViANLI), exp-027/028/029 (ViHSD):
+giữ native HF classifier PhoBERT, freeze encoder pretrained cùng revision như MoE.
+Chỉ classifier học, router không tồn tại và balance coefficient bằng 0. Giữ dropout
+encoder theo train/eval như MoE; không nạp encoder fine-tuned stage 0.
+
+Screening LR classifier 1e-4/3e-4/1e-3, mỗi config seed 42, 50 epoch, batch 16,
+CE, cùng data/max_length và checkpoint selection bằng validation macro F1 với đợt
+MoE. Hai loại head chọn LR tốt riêng với cùng số lần thử; không ép LR tốt trùng nhau.
+MoE exp-018..023 đang tìm LR chung cho head/router, chưa tìm hai LR độc lập.
+Giữ nguyên native pooling/dropout/capacity của original, báo rõ khác biệt với MoE.
+
+Đăng ký local planned run-052..057, chưa kiểm tra trùng W&B/storage từ xa. Không
+chạy GPU hoặc thay metric cũ. Baseline full fine-tuning cũ chỉ là mốc hệ thống.
+
+## D015 — 2026-11-26: ưu tiên tối ưu MoE head với encoder frozen
+
+Theo yêu cầu người dùng sau stage 0–1: freeze encoder, tập trung train router,
+experts và final classifier nhiều epoch để tối ưu validation macro F1. Thay thế
+ưu tiên full fine-tuning cho đợt phát triển tiếp theo; không sửa config/metric cũ.
+Encoder khởi đầu từ pretrained revision đã pin, không nạp encoder fine-tuned từ
+stage 0. Chỉ weights bị freeze; dropout encoder theo train/eval hiện hành (D008),
+không đổi công thức model hoặc cache representation trong tác vụ này.
+
+Đợt đầu đăng ký exp-018/019/020 (ViANLI), exp-021/022/023 (ViHSD): kế thừa M0,
+freeze_backbone=true, tối đa 50 epoch, seed 42, LR head/router cùng mức lần lượt
+1e-4/3e-4/1e-3. Giữ E=4,k=2,H=512, CLS, CE, balance coefficient 0.01, batch 16,
+data/revision và dropout cũ. Engine sẵn có đánh giá mỗi epoch, giữ và nạp lại
+checkpoint validation macro F1 cao nhất; chưa có early stopping/scheduler.
+Ba mức LR là screening, không phải khẳng định tối ưu hoặc bảo đảm F1 cải thiện.
+
+Group dùng ID dự kiến local run-046..051, chưa đặt chỗ/đối chiếu W&B/storage từ xa.
+Không ghi tracker hoặc chạy GPU trong tác vụ chuẩn bị. Sau LR screening mới khảo
+sát riêng router LR, balance coefficient và top-k; không chọn bằng test. Muốn kết
+luận lợi ích routing cần C1/C2 frozen cùng budget và xác nhận seed tương ứng.
+
 ## D014 — 2026-11-25: khởi tạo config PhoBERT giai đoạn 0–1
 
 Theo yêu cầu người dùng, cụ thể hóa C1/C2/M0 trong PLAN thành exp-012/013/014 cho

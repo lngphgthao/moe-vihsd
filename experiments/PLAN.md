@@ -1,5 +1,65 @@
 # Kế hoạch thực nghiệm hiện hành
 
+## Ưu tiên hiện tại — 2026-11-26, D015: frozen encoder, tối ưu MoE head
+
+Người dùng xác nhận stage 0–1 đã chạy. CSV ghi stage 1 completed nhưng verification
+còn unverified; cần đối chiếu W&B/resolved config/artifact trước khi dùng làm bằng
+chứng. Các ghi chú "chưa chạy" bên dưới là hồ sơ setup, không phải trạng thái mới.
+
+Đợt tiếp theo dùng pretrained PhoBERT-base đã pin, freeze toàn bộ encoder weights,
+train router + experts + classifier. Không dùng encoder đã fine-tune ở stage 0.
+Freeze weights giữ dropout encoder hoạt động khi train theo implementation hiện hành;
+không coi representation là cố định giữa các forward train. Thay thế ưu tiên full
+fine-tuning stage 2–3 cũ; giữ các câu hỏi routing nhưng dưới freeze policy mới.
+
+### Đợt A — LR screening, 50 epoch
+
+| Dataset | LR head/router | Experiment |
+|---|---|---|
+| ViANLI | 1e-4 / 3e-4 / 1e-3 | exp-018 / exp-019 / exp-020 |
+| ViHSD | 1e-4 / 3e-4 / 1e-3 | exp-021 / exp-022 / exp-023 |
+
+Baseline original frozen theo D016: ViANLI exp-024/025/026, ViHSD exp-027/028/029,
+classifier LR 1e-4/3e-4/1e-3 theo thứ tự. Mỗi config 50 epoch, seed 42, batch 16,
+CE, pretrained encoder frozen cùng revision/data/split/max_length với MoE. Original
+giữ native head (pooling/dropout/capacity riêng), không có router hay auxiliary loss.
+Mỗi loại head chọn LR riêng bằng validation macro F1, ngân sách tìm kiếm 3 run/dataset.
+MoE ở bảng trên dùng head LR = router LR trong từng run: đây là tìm một LR chung,
+chưa phải search độc lập router/head. Các phép thử router LR riêng ở đợt sau.
+
+Mỗi config seed 42, batch 16, 50 epoch, đánh giá validation mỗi epoch, checkpoint
+theo macro F1 cao nhất (không lấy mặc định epoch cuối). Kế thừa M0 E=4,k=2,H=512,
+CLS, CE, coef=0.01; head/router cùng LR để giới hạn screening ở 3 run/dataset.
+Không đổi dữ liệu, segmentation, max_length hoặc test. Chưa có early stopping;
+50 epoch là budget thử nghiệm, chưa được chứng minh đủ hội tụ hoặc tối ưu.
+Smoke giữ 1 epoch/64 train/32 validation; không diễn giải F1 smoke.
+
+Group: configs/groups/{dataset}_phobert_frozen_head_lr.yaml. ID run-046..051 đã
+đăng ký planned local, chưa đối chiếu W&B/storage. Tracker cũ 27 dòng được archive
+nguyên trạng tại experiments/archive/experiment_tracker_2026-11-26.csv; tracker
+hiện hành giữ 12 full run planned: MoE run-046..051 và original run-052..057.
+Group baseline: configs/groups/{dataset}_phobert_frozen_original_lr.yaml.
+Smoke dùng --auto-run-ids trên filesystem/tracker chung (run-058 trở lên);
+full dùng ID planned trong group, không thêm cờ auto.
+Retry nhận ID mới. Allocator không đọc archive; phải đối chiếu archive khi cấp ID
+tường minh. Nhiều session độc lập cần cấp ID đã đối chiếu chung W&B/storage.
+Không có run GPU mới từ tác vụ chuẩn bị.
+
+### Các đợt sau — chỉ quyết định sau khi có learning curves
+
+1. Chọn LR anchor theo best validation macro F1, kiểm tra per-class F1, gap
+   train/validation, gradient và routing tại best checkpoint. Nếu best còn ở epoch
+   cuối và curve còn cải thiện, cân nhắc budget dài hơn bằng experiment ID mới;
+   nếu train tăng nhưng validation giảm, ưu tiên regularization, không tăng epoch mù.
+2. Giữ head LR anchor, khảo sát riêng router LR (0.3x và 3x anchor); sau đó coef
+   0/0.001/0.1 và k=4 so với k=2. Mỗi lần đổi một yếu tố, ID mới; chưa có YAML
+   cho các đợt này. Top-1 có giới hạn gradient như mô tả stage 2 bên dưới.
+3. Xác nhận ứng viên và reference frozen bằng [42,123,2026], kèm C1/C2 frozen
+   cùng budget để phân biệt routing với capacity. Không dùng chênh lệch so stage
+   0–1 khác freeze/budget để khẳng định lợi ích riêng của router.
+4. Chỉ sau đó xét pooling/residual/expert, ablation và khóa finalist + seed/protocol
+   trước test. Mục tiêu tối ưu là validation macro F1; chưa có bảo đảm F1 cao nhất.
+
 ## Kế hoạch PhoBERT-base classifier — 2026-11-24, D013
 
 Người dùng chốt `vinai/phobert-base` cho cả ViANLI/ViHSD. Các mục 2026-11-23 phía
